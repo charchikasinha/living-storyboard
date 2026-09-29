@@ -9,6 +9,28 @@ export type Take = {
 };
 export type DirectionEvent = { at: number; text: string };
 
+// ---- Tape: every live run is recorded as a segment; versions stitch segments.
+export type Frame = { t: number; blob: Blob }; // t = ms from segment start
+export type Mark = { t: number; text: string };
+export type Segment = {
+  id: string;
+  blob: Blob | null; // null while still recording
+  durationMs: number;
+  frames: Frame[];
+  marks: Mark[];
+  createdAt: number;
+};
+/** A slice of a segment; `to` is null while that segment is still recording. */
+export type Part = { segId: string; from: number; to: number | null };
+export type Version = {
+  id: string;
+  n: number;
+  createdAt: number;
+  parentId: string | null;
+  branchAtMs: number | null;
+  parts: Part[];
+};
+
 export type Shot = {
   id: string;
   title: string;
@@ -18,7 +40,10 @@ export type Shot = {
   stills: Still[];
   takes: Take[];
   directions: DirectionEvent[];
-  heroId: string | null; // still or take shown in present mode
+  heroId: string | null; // still, take or version shown in present mode
+  segments: Segment[];
+  versions: Version[];
+  activeVersionId: string | null;
 };
 
 export type Board = {
@@ -42,6 +67,9 @@ export function newShot(partial: Partial<Shot> = {}): Shot {
     takes: [],
     directions: [],
     heroId: null,
+    segments: [],
+    versions: [],
+    activeVersionId: null,
     ...partial,
   };
 }
@@ -299,4 +327,94 @@ export async function saveBoard(board: Board) {
   } catch {
     // Saving is best-effort; the board still works in memory.
   }
+}
+
+// ---- Tape helpers ------------------------------------------------------------
+
+export const partLength = (part: Part, liveMs = 0) =>
+  (part.to ?? part.from + liveMs) - part.from;
+
+export const versionLength = (v: Version, liveMs = 0) =>
+  v.parts.reduce((sum, p) => sum + Math.max(0, partLength(p, liveMs)), 0);
+
+/** Find which part/segment a version-time T falls in. */
+export function locate(v: Version, t: number, liveMs = 0) {
+  let offset = 0;
+  for (let i = 0; i < v.parts.length; i++) {
+    const part = v.parts[i];
+    const len = partLength(part, liveMs);
+    if (t < offset + len || i === v.parts.length - 1) {
+      const local = part.from + Math.max(0, Math.min(len, t - offset));
+      return { index: i, part, offset, local };
+    }
+    offset += len;
+  }
+  return null;
+}
+
+/** Latest frame at or before local time t (falls back to the first frame). */
+export function frameAt(frames: Frame[], t: number): Blob | null {
+  if (!frames.length) return null;
+  let best = frames[0];
+  for (const f of frames) {
+    if (f.t <= t) best = f;
+    else break;
+  }
+  return best.blob;
+}
+
+/** Parts of a version cut off at version-time T (the redirect point). */
+export function truncateAt(v: Version, t: number, liveMs = 0): Part[] {
+  const hit = locate(v, t, liveMs);
+  if (!hit) return [];
+  return [
+    ...v.parts.slice(0, hit.index),
+    { ...hit.part, to: Math.max(hit.part.from, Math.round(hit.local)) },
+  ];
+}
+
+/** Older boards / interrupted recordings: fill new fields, drop empty parts. */
+export function sanitizeBoard(board: Board): Board {
+  return {
+    ...board,
+    shots: board.shots.map((raw) => {
+      const shot = { ...newShot(), ...raw };
+      const segments = (shot.segments ?? []).filter((s) => s.blob && s.durationMs > 0);
+      const ok = new Set(segments.map((s) => s.id));
+      const versions = (shot.versions ?? [])
+        .map((v) => ({
+          ...v,
+          parts: v.parts
+            .filter((p) => ok.has(p.segId))
+            .map((p) => ({
+              ...p,
+              to: p.to ?? segments.find((s) => s.id === p.segId)!.durationMs,
+            })),
+        }))
+        .filter((v) => v.parts.length);
+      const activeVersionId = versions.some((v) => v.id === shot.activeVersionId)
+        ? shot.activeVersionId
+        : (versions.at(-1)?.id ?? null);
+      return { ...shot, segments, versions, activeVersionId };
+    }),
+  };
+}
+
+export function pickTapeMime() {
+  // WebM seeks reliably after a duration fix; prefer it for the rewind tape.
+  const options = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  if (typeof MediaRecorder === "undefined") return "";
+  return options.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+export function grabFrameSized(video: HTMLVideoElement, width = 1280): Promise<Blob> {
+  const w = Math.min(width, video.videoWidth || width);
+  const h = Math.round(w * ((video.videoHeight || 9) / (video.videoWidth || 16)));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d")!.drawImage(video, 0, 0, w, h);
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("frame"))), "image/jpeg", 0.85),
+  );
 }

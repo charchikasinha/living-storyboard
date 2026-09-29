@@ -2,10 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-import { blobUrl, coverFor } from "@/components/storyboard/storyboard-app";
+import { blobUrl } from "@/components/storyboard/blob-url";
+import { ChainPlayer } from "@/components/storyboard/chain-player";
+import { coverFor } from "@/components/storyboard/storyboard-app";
 import type { Board, Shot } from "@/lib/storyboard";
 
 function heroMedia(shot: Shot) {
+  const heroVersion =
+    shot.versions.find((v) => v.id === shot.heroId) ??
+    (shot.heroId ? null : shot.versions.find((v) => v.id === shot.activeVersionId));
+  if (heroVersion) return { kind: "version" as const, version: heroVersion };
   const take = shot.takes.find((t) => t.id === shot.heroId);
   if (take) return { kind: "video" as const, blob: take.blob };
   const cover = coverFor(shot);
@@ -77,7 +83,9 @@ export function PresentMode({
 
       <div className="sb-present-body">
         <div className="sb-present-media">
-          {media?.kind === "video" ? (
+          {media?.kind === "version" ? (
+            <ChainPlayer key={media.version.id} parts={media.version.parts} segments={shot.segments} loop />
+          ) : media?.kind === "video" ? (
             <video key={blobUrl(media.blob)} src={blobUrl(media.blob)} autoPlay loop muted playsInline />
           ) : media?.kind === "image" ? (
             <img src={blobUrl(media.blob)} alt="" />

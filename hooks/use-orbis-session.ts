@@ -387,9 +387,14 @@ export function useOrbisSession(
     setPaused(false);
 
     // Remove ReactorView before closing the WebRTC tracks it is playing.
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
+    // (A hidden tab never runs rAF, so fall back to a short timeout.)
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 120);
+      requestAnimationFrame(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
     try {
       const disconnected = await runAction(() => disconnect());
       if (disconnected) {
