@@ -42,6 +42,8 @@ export function useOrbisSession(
   const disconnecting = useRef(false);
   const conditionsReadyResolver = useRef<(() => void) | null>(null);
   const imageReadyResolver = useRef<(() => void) | null>(null);
+  const stoppedResolver = useRef<(() => void) | null>(null);
+  const runStartedRef = useRef(false);
   const expectsImageForRun = useRef(false);
 
   const connected = status === "ready";
@@ -203,6 +205,15 @@ export function useOrbisSession(
 
     if (!disconnecting.current) updateRunState(message);
 
+    if (
+      message.type === "generation_reset" ||
+      message.type === "generation_complete" ||
+      (message.type === "state" && message.started === false)
+    ) {
+      stoppedResolver.current?.();
+      stoppedResolver.current = null;
+    }
+
     if (message.type === "command_error") {
       setError(
         `${message.command || "command"}: ${message.reason || "rejected"}`,
@@ -319,6 +330,51 @@ export function useOrbisSession(
     await runAction(() => startGeneration(editedImage, groundedPrompt));
   };
 
+  useEffect(() => {
+    runStartedRef.current = runStarted;
+  }, [runStarted]);
+
+  // Stop whatever is playing (if anything) and wait until Orbis confirms.
+  const stopIfRunning = async () => {
+    if (!runStartedRef.current) return;
+    const stopped = new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 6_000);
+      stoppedResolver.current = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    });
+    await sendCommand("reset", {});
+    await stopped;
+    setRunStarted(false);
+    runStartedRef.current = false;
+  };
+
+  /** Storyboard: (re)start a shot from an optional reference image + prompt. */
+  const startShot = (shotImage: File | null, shotPrompt: string) =>
+    runAction(async () => {
+      await stopIfRunning();
+      setImage(shotImage);
+      setPrompt(shotPrompt);
+      await startGeneration(shotImage, shotPrompt);
+    });
+
+  /** Storyboard: steer the running shot with an explicit prompt. */
+  const steerWith = (nextPrompt: string) =>
+    runAction(async () => {
+      if (!nextPrompt.trim()) throw new Error("Nothing to direct yet.");
+      setPrompt(nextPrompt);
+      const reply = await sendCommand("set_prompt", {
+        prompt: nextPrompt.trim(),
+      });
+      const message = reply ? unwrapOrbisMessage(reply) : null;
+      if (message?.type === "command_error") {
+        throw new Error(`set_prompt: ${message.reason || "rejected"}`);
+      }
+    });
+
+  const stopShot = () => runAction(stopIfRunning);
+
   const steer = () =>
     runAction(async () => {
       if (!prompt.trim()) throw new Error("Enter a prompt before steering.");
@@ -380,6 +436,10 @@ export function useOrbisSession(
     startFromNanoOutput,
     setNanoBusy,
     steer,
+    startShot,
+    steerWith,
+    stopShot,
+    clearError: () => setError(""),
     pause: () => runAction(() => sendCommand("pause", {})),
     resume: () => runAction(() => sendCommand("resume", {})),
     reset: () => runAction(() => sendCommand("reset", {})),
