@@ -44,6 +44,8 @@ export type Shot = {
   segments: Segment[];
   versions: Version[];
   activeVersionId: string | null;
+  script: string;
+  scriptLine: number;
 };
 
 export type Board = {
@@ -70,6 +72,8 @@ export function newShot(partial: Partial<Shot> = {}): Shot {
     segments: [],
     versions: [],
     activeVersionId: null,
+    script: "",
+    scriptLine: 0,
     ...partial,
   };
 }
@@ -165,8 +169,6 @@ export const DIRECTION_GROUPS: DirectionGroup[] = [
     color: "#00b37e",
     exclusive: false,
     chips: [
-      { label: "Rain", prompt: "rain begins to fall" },
-      { label: "Fog", prompt: "fog rolls in" },
       { label: "Snow", prompt: "snow drifts down" },
       { label: "Wind", prompt: "strong wind moves through the scene" },
       { label: "Dust", prompt: "dust particles hang in the light" },
@@ -180,10 +182,46 @@ export const STYLE_SUFFIX =
 
 export type ActiveDirections = Record<string, string[]>; // groupId -> chip labels
 
+/** Slider/lens controls; each maps to a few words in the prompt. */
+export type Controls = {
+  speed: number; // 0 slow … 100 fast (50 = neutral)
+  warmth: number; // 0 cool … 100 warm (50 = neutral)
+  key: number; // 0 low-key … 100 high-key (50 = neutral)
+  haze: number; // 0 … 100
+  rain: number; // 0 … 100
+  lens: string; // "", "24mm", "32mm", "50mm", "85mm"
+};
+export const DEFAULT_CONTROLS: Controls = { speed: 50, warmth: 50, key: 50, haze: 0, rain: 0, lens: "" };
+
+export const LENSES: { label: string; prompt: string }[] = [
+  { label: "24mm", prompt: "shot on a 24mm wide-angle lens, deep perspective" },
+  { label: "32mm", prompt: "shot on a 32mm lens" },
+  { label: "50mm", prompt: "shot on a 50mm lens, natural perspective" },
+  { label: "85mm", prompt: "shot on an 85mm lens, compressed background, shallow depth of field" },
+];
+
+export function controlPhrases(c: Controls): { prompt: string; label: string }[] {
+  const out: { prompt: string; label: string }[] = [];
+  if (c.speed < 30) out.push({ prompt: "very slow, gentle camera movement", label: "Slow move" });
+  else if (c.speed > 70) out.push({ prompt: "fast, energetic camera movement", label: "Fast move" });
+  if (c.warmth < 30) out.push({ prompt: "cool blue colour temperature", label: "Cool" });
+  else if (c.warmth > 70) out.push({ prompt: "warm amber colour temperature", label: "Warm" });
+  if (c.key < 30) out.push({ prompt: "low-key lighting with deep, inky shadows", label: "Low-key" });
+  else if (c.key > 70) out.push({ prompt: "bright high-key lighting, soft shadows", label: "High-key" });
+  if (c.haze > 60) out.push({ prompt: "thick atmospheric haze", label: "Heavy haze" });
+  else if (c.haze > 20) out.push({ prompt: "light haze in the air", label: "Haze" });
+  if (c.rain > 60) out.push({ prompt: "heavy rain pouring down", label: "Heavy rain" });
+  else if (c.rain > 20) out.push({ prompt: "light rain drizzling", label: "Drizzle" });
+  const lens = LENSES.find((l) => l.label === c.lens);
+  if (lens) out.push({ prompt: lens.prompt, label: lens.label });
+  return out;
+}
+
 export function composePrompt(
   description: string,
   active: ActiveDirections,
   custom: string,
+  controls: Controls = DEFAULT_CONTROLS,
 ) {
   const parts: string[] = [];
   const base = description.trim();
@@ -194,6 +232,7 @@ export function composePrompt(
       if (chip) parts.push(chip.prompt);
     }
   }
+  for (const phrase of controlPhrases(controls)) parts.push(phrase.prompt);
   if (custom.trim()) parts.push(custom.trim().replace(/[.\s]+$/, ""));
   if (!parts.length) return "";
   const sentence = parts
@@ -202,8 +241,13 @@ export function composePrompt(
   return `${sentence}. ${STYLE_SUFFIX}`;
 }
 
-export function describeActive(active: ActiveDirections, custom: string) {
+export function describeActive(
+  active: ActiveDirections,
+  custom: string,
+  controls: Controls = DEFAULT_CONTROLS,
+) {
   const labels = DIRECTION_GROUPS.flatMap((g) => active[g.id] ?? []);
+  labels.push(...controlPhrases(controls).map((p) => p.label));
   if (custom.trim()) labels.push(`“${custom.trim()}”`);
   return labels.join(" · ");
 }
@@ -291,7 +335,8 @@ export function formatClock(ms: number) {
 
 const DB_NAME = "living-storyboard";
 const STORE = "boards";
-const KEY = "current";
+const LEGACY_KEY = "current";
+const LAST_KEY = "sb-last-board";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -302,31 +347,64 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-export async function loadBoard(): Promise<Board | null> {
+function idb<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return openDb().then(
+    (db) =>
+      new Promise<T>((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const req = fn(tx.objectStore(STORE));
+        tx.oncomplete = () => resolve(req.result);
+        tx.onerror = () => reject(tx.error);
+      }),
+  );
+}
+
+/** All productions on this computer (older single-board saves are migrated). */
+export async function loadBoards(): Promise<Board[]> {
   try {
-    const db = await openDb();
-    return await new Promise((resolve, reject) => {
-      const req = db.transaction(STORE).objectStore(STORE).get(KEY);
-      req.onsuccess = () => resolve((req.result as Board) ?? null);
-      req.onerror = () => reject(req.error);
-    });
+    const keys = (await idb("readonly", (st) => st.getAllKeys())) as string[];
+    const boards: Board[] = [];
+    for (const key of keys) {
+      const board = (await idb("readonly", (st) => st.get(key))) as Board | undefined;
+      if (!board) continue;
+      if (key === LEGACY_KEY) {
+        await idb("readwrite", (st) => st.put(board, board.id));
+        await idb("readwrite", (st) => st.delete(LEGACY_KEY));
+        if (boards.some((b) => b.id === board.id)) continue;
+      }
+      boards.push(board);
+    }
+    return boards.sort((a, b) => b.updatedAt - a.updatedAt);
   } catch {
-    return null;
+    return [];
   }
 }
 
 export async function saveBoard(board: Board) {
   try {
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(board, KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
+    await idb("readwrite", (st) => st.put(board, board.id));
   } catch {
     // Saving is best-effort; the board still works in memory.
   }
+}
+
+export async function deleteBoard(id: string) {
+  try {
+    await idb("readwrite", (st) => st.delete(id));
+  } catch {}
+}
+
+export function lastBoardId() {
+  try {
+    return localStorage.getItem(LAST_KEY);
+  } catch {
+    return null;
+  }
+}
+export function rememberBoard(id: string) {
+  try {
+    localStorage.setItem(LAST_KEY, id);
+  } catch {}
 }
 
 // ---- Tape helpers ------------------------------------------------------------

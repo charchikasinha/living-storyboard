@@ -113,9 +113,9 @@ export function Timeline(props: Props) {
     <div className="sb-tape">
       <div className="sb-tape-head">
         <span className="sb-section-label">
-          Tape · v{version.n}
+          Tape · Take {version.n}
           {parent && version.branchAtMs !== null && (
-            <em>redirected from v{parent.n} at {formatClock(version.branchAtMs)}</em>
+            <em>branched from take {parent.n} at {formatClock(version.branchAtMs)}</em>
           )}
         </span>
         <span className="sb-mono sb-tape-clock">
@@ -178,6 +178,14 @@ export function Timeline(props: Props) {
             </button>
           )}
         </div>
+        <div className="sb-transport-group">
+        <button
+          className={`sb-btn ${props.heroId === version.id ? "sb-btn-best" : ""}`}
+          onClick={() => props.onHero(version.id)}
+          title="Mark this take as the one your crew sees"
+        >
+          {props.heroId === version.id ? "★ Best take" : "☆ Mark best"}
+        </button>
         <button
           className="sb-btn sb-btn-primary"
           onClick={props.onRedirect}
@@ -186,32 +194,52 @@ export function Timeline(props: Props) {
         >
           ⟲ Redirect from {formatClock(head)}
         </button>
+        </div>
       </div>
 
       {versions.length > 0 && (
-        <div className="sb-versions">
+        <div className="sb-takes-strip">
+          <span className="sb-takes-label">Takes</span>
           {[...versions].sort((a, b) => a.n - b.n).map((v) => {
             const p = versions.find((x) => x.id === v.parentId);
             const isActive = v.id === version.id;
-            const isRecording = live && v.parts.some((part) => part.segId === live.segId);
+            const isRecording = Boolean(live && v.parts.some((part) => part.segId === live.segId));
+            const len = versionLength(v, liveMs);
+            const thumb = frameAtVersion(v, len * 0.6, segments, isRecording ? live : null);
             return (
-              <div key={v.id} className={`sb-version ${isActive ? "is-active" : ""}`}>
-                <button className="sb-version-main" onClick={() => props.onSelectVersion(v.id)}>
-                  <strong>v{v.n}</strong>
-                  <span>
-                    {formatClock(versionLength(v, liveMs))}
-                    {p && v.branchAtMs !== null ? ` · from v${p.n} @ ${formatClock(v.branchAtMs)}` : " · original"}
+              <div key={v.id} className={`sb-take-card ${isActive ? "is-active" : ""} ${props.heroId === v.id ? "is-best" : ""}`}>
+                <button className="sb-take-card-main" onClick={() => props.onSelectVersion(v.id)} title={`Open take ${v.n}`}>
+                  <div className="sb-take-card-thumb">
+                    {thumb && <img src={blobUrl(thumb)} alt="" draggable={false} />}
+                    {isRecording && <i className="sb-version-rec">REC</i>}
+                    {props.heroId === v.id && <i className="sb-take-best">★</i>}
+                  </div>
+                  <span className="sb-take-card-title">
+                    T{v.n} · {formatClock(len)}
                   </span>
-                  {isRecording && <i className="sb-version-rec">REC</i>}
+                  <span className="sb-take-card-sub">
+                    {p && v.branchAtMs !== null ? `from T${p.n} @ ${formatClock(v.branchAtMs)}` : "original"}
+                  </span>
                 </button>
-                <button title="Show this version in Present mode" className={props.heroId === v.id ? "is-on" : ""} onClick={() => props.onHero(v.id)}>★</button>
-                <button title="Export as one video file" disabled={!!props.exporting || !!isRecording} onClick={() => props.onExport(v.id)}>
-                  {props.exporting?.id === v.id ? `${Math.round(props.exporting.progress * 100)}%` : "↓"}
-                </button>
-                <button title="Delete version" disabled={!!isRecording} onClick={() => props.onDelete(v.id)}>✕</button>
+                <div className="sb-take-card-tools">
+                  <button title="Export as one video file" disabled={!!props.exporting || isRecording} onClick={() => props.onExport(v.id)}>
+                    {props.exporting?.id === v.id ? `${Math.round(props.exporting.progress * 100)}%` : "↓"}
+                  </button>
+                  <button title="Delete take" disabled={isRecording} onClick={() => props.onDelete(v.id)}>✕</button>
+                </div>
               </div>
             );
           })}
+          <button
+            className="sb-take-card sb-take-branch"
+            onClick={props.onRedirect}
+            disabled={!props.canRedirect || props.busy}
+            title="Keep the take up to the playhead and shoot a new continuation"
+          >
+            <span>⑂</span>
+            Branch take
+            <small>from {formatClock(head)}</small>
+          </button>
         </div>
       )}
     </div>
