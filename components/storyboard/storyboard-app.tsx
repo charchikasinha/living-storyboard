@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 
+import { ArchivePanel, DRAG_IMAGE, DRAG_PROMPT } from "@/components/storyboard/archive-panel";
 import { blobUrl } from "@/components/storyboard/blob-url";
 import { ChainPlayer, exportVersion } from "@/components/storyboard/chain-player";
 import { PresentMode } from "@/components/storyboard/present-mode";
@@ -733,7 +734,39 @@ function Studio({
 
   const onDropRef = (id: string) => (event: DragEvent) => {
     event.preventDefault();
+    setDropHint(null);
+    const archived = event.dataTransfer.getData(DRAG_IMAGE);
+    if (archived) {
+      const img = board?.imageArchive.find((x) => x.id === archived);
+      if (img) updateShot(id, (s) => ({ ...s, refImage: img.blob }));
+      return;
+    }
     void setReference(id, event.dataTransfer.files?.[0]);
+  };
+
+  // ---- Archive (prompts + images collected before shooting) ----
+  const [dropHint, setDropHint] = useState<"tell" | "scene" | "ref" | null>(null);
+  const acceptsPrompt = (e: DragEvent) => e.dataTransfer.types.includes(DRAG_PROMPT);
+  const acceptsImage = (e: DragEvent) => e.dataTransfer.types.includes(DRAG_IMAGE) || e.dataTransfer.types.includes("Files");
+  const usePrompt = (text: string) => {
+    applyDirections(active, text);
+    setNotice(isLiveHere ? `Directing: “${text.slice(0, 80)}”` : "Prompt set — it applies when you shoot.");
+  };
+  const addPrompts = (texts: string[], source: string) =>
+    updateBoard((b) => ({
+      ...b,
+      promptArchive: [...b.promptArchive, ...texts.map((text) => ({ id: uid(), text, source }))],
+    }));
+  const addArchiveImages = async (files: Blob[], names?: string[]) => {
+    const added: { id: string; blob: Blob; name: string }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      try {
+        added.push({ id: uid(), blob: await to16x9(files[i]), name: names?.[i] ?? (files[i] as File).name ?? "image" });
+      } catch {
+        // skip unreadable files
+      }
+    }
+    if (added.length) updateBoard((b) => ({ ...b, imageArchive: [...b.imageArchive, ...added] }));
   };
 
   const [presenting, setPresenting] = useState(false);
@@ -899,19 +932,33 @@ function Studio({
       )}
 
       <div className="sb-workspace sb-workspace-3">
-        <ShotList
-          shots={shots}
-          selectedId={shot.id}
-          liveId={playing ? playingId : null}
-          onSelect={selectShot}
-          onAdd={() => addShot()}
-          onMove={moveShot}
-          onDelete={removeShot}
-          onDropRef={onDropRef}
+        <ArchivePanel
+          scene={shot.description}
+          prompts={board.promptArchive}
+          images={board.imageArchive}
+          onAddPrompts={addPrompts}
+          onSetPrompts={(next) => updateBoard((b) => ({ ...b, promptArchive: next }))}
+          onUsePrompt={usePrompt}
+          onAddImages={(files) => void addArchiveImages(files)}
+          onRemoveImage={(id) => updateBoard((b) => ({ ...b, imageArchive: b.imageArchive.filter((x) => x.id !== id) }))}
+          onUseImage={(img) => {
+            updateShot(shot.id, (s) => ({ ...s, refImage: img.blob }));
+            setNotice(`“${img.name}” is now the reference frame for ${shot.title || "this shot"}.`);
+          }}
         />
 
-        {/* ---------- Stage ---------- */}
+        {/* ---------- Play area ---------- */}
         <section className="sb-stage-col">
+          <ShotList
+            shots={shots}
+            selectedId={shot.id}
+            liveId={playing ? playingId : null}
+            onSelect={selectShot}
+            onAdd={() => addShot()}
+            onMove={moveShot}
+            onDelete={removeShot}
+            onDropRef={onDropRef}
+          />
           <div className="sb-stage" ref={stageRef}>
             {session.runStarted ? (
               <div className="sb-live-layer" ref={liveRef}>
@@ -1077,6 +1124,10 @@ function Studio({
               }))
             }
             onUseAsReference={(blob) => updateShot(shot.id, (s) => ({ ...s, refImage: blob }))}
+            onArchive={(blob) => {
+              void addArchiveImages([blob], [`${shot.title || "Shot"} still`]);
+              setNotice("Still added to the image archive.");
+            }}
             onNewShotFrom={(blob) =>
               addShot({ refImage: blob, description: shot.description }, selectedIndex)
             }
@@ -1105,7 +1156,22 @@ function Studio({
           </div>
 
           {/* Tell the scene: type or hold to speak — always visible */}
-          <div className="sb-tell">
+          <div
+            className={`sb-tell ${dropHint === "tell" ? "is-drop" : ""}`}
+            onDragOver={(e) => {
+              if (!acceptsPrompt(e)) return;
+              e.preventDefault();
+              setDropHint("tell");
+            }}
+            onDragLeave={() => setDropHint(null)}
+            onDrop={(e) => {
+              const text = e.dataTransfer.getData(DRAG_PROMPT);
+              if (!text) return;
+              e.preventDefault();
+              setDropHint(null);
+              usePrompt(text);
+            }}
+          >
             <div className="sb-section-label">
               Tell the scene {isLiveHere ? <em className="sb-live-hint">live — lands in ~2s</em> : <em>applies when you shoot</em>}
             </div>
@@ -1168,7 +1234,22 @@ function Studio({
             />
           ) : (
             <>
-              <label className="sb-field">
+              <label
+                className={`sb-field ${dropHint === "scene" ? "is-drop" : ""}`}
+                onDragOver={(e) => {
+                  if (!acceptsPrompt(e)) return;
+                  e.preventDefault();
+                  setDropHint("scene");
+                }}
+                onDragLeave={() => setDropHint(null)}
+                onDrop={(e) => {
+                  const text = e.dataTransfer.getData(DRAG_PROMPT);
+                  if (!text) return;
+                  e.preventDefault();
+                  setDropHint(null);
+                  updateShot(shot.id, (s) => ({ ...s, description: text }));
+                }}
+              >
                 <span>Scene</span>
                 <textarea
                   rows={3}
@@ -1179,8 +1260,13 @@ function Studio({
               </label>
 
               <div
-                className="sb-field sb-ref"
-                onDragOver={(e) => e.preventDefault()}
+                className={`sb-field sb-ref ${dropHint === "ref" ? "is-drop" : ""}`}
+                onDragOver={(e) => {
+                  if (!acceptsImage(e)) return;
+                  e.preventDefault();
+                  setDropHint("ref");
+                }}
+                onDragLeave={() => setDropHint(null)}
                 onDrop={onDropRef(shot.id)}
               >
                 <span>Reference frame</span>
@@ -1292,6 +1378,7 @@ function TakesGallery({
   onDeleteTake,
   onUseAsReference,
   onNewShotFrom,
+  onArchive,
 }: {
   shot: Shot;
   onHero: (id: string) => void;
@@ -1299,6 +1386,7 @@ function TakesGallery({
   onDeleteTake: (id: string) => void;
   onUseAsReference: (blob: Blob) => void;
   onNewShotFrom: (blob: Blob) => void;
+  onArchive: (blob: Blob) => void;
 }) {
   const items = useMemo(
     () =>
@@ -1336,6 +1424,7 @@ function TakesGallery({
               <>
                 <button title="Use as this shot's reference frame" onClick={() => onUseAsReference(item.blob)}>⤒ Ref</button>
                 <button title="Start a new shot from this frame" onClick={() => onNewShotFrom(item.blob)}>＋ Shot</button>
+                <button title="Save to the image archive" onClick={() => onArchive(item.blob)}>⇢ Arch</button>
               </>
             )}
             <button title="Download" onClick={() => downloadBlob(item.blob, `${base}-${item.kind}-${items.length - i}.${extFor(item.blob)}`)}>↓</button>

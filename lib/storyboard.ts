@@ -48,11 +48,16 @@ export type Shot = {
   scriptLine: number;
 };
 
+export type ArchivedPrompt = { id: string; text: string; source?: string };
+export type ArchivedImage = { id: string; blob: Blob; name: string };
+
 export type Board = {
   id: string;
   title: string;
   shots: Shot[];
   updatedAt: number;
+  promptArchive: ArchivedPrompt[];
+  imageArchive: ArchivedImage[];
 };
 
 export const uid = () =>
@@ -90,6 +95,8 @@ export function newBoard(): Board {
       }),
     ],
     updatedAt: Date.now(),
+    promptArchive: [],
+    imageArchive: [],
   };
 }
 
@@ -455,6 +462,8 @@ export function truncateAt(v: Version, t: number, liveMs = 0): Part[] {
 export function sanitizeBoard(board: Board): Board {
   return {
     ...board,
+    promptArchive: board.promptArchive ?? [],
+    imageArchive: board.imageArchive ?? [],
     shots: board.shots.map((raw) => {
       const shot = { ...newShot(), ...raw };
       const segments = (shot.segments ?? []).filter((s) => s.blob && s.durationMs > 0);
