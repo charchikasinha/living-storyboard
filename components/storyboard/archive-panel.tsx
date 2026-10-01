@@ -9,6 +9,9 @@ import type { ArchivedImage, ArchivedPrompt } from "@/lib/storyboard";
 /** Drag payload types shared with the drop targets in the studio. */
 export const DRAG_PROMPT = "application/x-sb-prompt";
 export const DRAG_IMAGE = "application/x-sb-image";
+const DRAG_SOURCE = "application/x-sb-cowriter";
+/** Set when a co-writer block lands in the archive (so the block can show ✓). */
+const droppedInArchive = { current: false };
 
 type Props = {
   scene: string;
@@ -57,7 +60,7 @@ function CoWriter({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<string[]>([]);
-  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [added, setAdded] = useState<Set<number>>(new Set());
   const [pasted, setPasted] = useState("");
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(true);
@@ -86,7 +89,7 @@ function CoWriter({
       const data = (await res.json()) as { prompts?: string[]; error?: string };
       if (!res.ok || !data.prompts) throw new Error(data.error || "Co-writer failed");
       setResults(data.prompts);
-      setPicked(new Set(data.prompts.map((_, i) => i)));
+      setAdded(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -109,11 +112,16 @@ function CoWriter({
     }
   };
 
-  const addPicked = () => {
-    const texts = results.filter((_, i) => picked.has(i));
-    if (!texts.length) return;
-    onAdd(texts, provider === "paste" ? "Pasted" : PROVIDER_LABEL[provider]);
-    setResults([]);
+  const source = provider === "paste" ? "Pasted" : PROVIDER_LABEL[provider];
+  const addOne = (i: number) => {
+    onAdd([results[i]], source);
+    setAdded((s) => new Set(s).add(i));
+  };
+  const addAll = () => {
+    const idx = results.map((_, i) => i).filter((i) => !added.has(i));
+    if (!idx.length) return;
+    onAdd(idx.map((i) => results[i]), source);
+    setAdded(new Set(results.map((_, i) => i)));
   };
 
   return (
@@ -124,39 +132,31 @@ function CoWriter({
       </button>
       {open && (
         <div className="sb-arch-body">
-          <div className="sb-seg" role="radiogroup" aria-label="AI model">
-            {ALL.map((p) => {
-              const ok = available?.includes(p);
-              return (
-                <button
-                  key={p}
-                  role="radio"
-                  aria-checked={provider === p}
-                  className={provider === p ? "is-on" : ""}
-                  disabled={!ok}
-                  title={ok ? `Ask ${PROVIDER_LABEL[p]}` : `Add ${KEY_NAME[p]} to .env.local to enable`}
-                  onClick={() => setProvider(p)}
-                >
-                  {PROVIDER_LABEL[p]}
-                </button>
-              );
-            })}
-            <button role="radio" aria-checked={provider === "paste"} className={provider === "paste" ? "is-on" : ""} onClick={() => setProvider("paste")} title="No key needed: copy a request into claude.ai or ChatGPT and paste the reply back">
-              Copy &amp; paste
-            </button>
-          </div>
-
           <textarea
             rows={3}
             value={brief}
-            placeholder="e.g. Mara gets the call that changes everything — build tension, then the blackout."
+            placeholder="Describe the scene, e.g. A golden retriever plays with a red ball at home; a woman in a white summer dress brings his food; he jumps on her, then eats."
             onChange={(e) => setBrief(e.target.value)}
           />
-          <div className="sb-arch-row">
+          <div className="sb-arch-row sb-cw-controls">
+            <select
+              className="sb-select"
+              value={provider}
+              aria-label="AI model"
+              onChange={(e) => setProvider(e.target.value as Provider | "paste")}
+            >
+              {ALL.map((p) => (
+                <option key={p} value={p} disabled={!available?.includes(p)}>
+                  {PROVIDER_LABEL[p]}
+                  {available?.includes(p) ? "" : " — add key"}
+                </option>
+              ))}
+              <option value="paste">Copy &amp; paste</option>
+            </select>
             <label className="sb-count">
               Beats
               <select value={count} onChange={(e) => setCount(+e.target.value)}>
-                {[4, 6, 8, 10].map((n) => (
+                {[3, 4, 6, 8, 10].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
@@ -165,11 +165,11 @@ function CoWriter({
             </label>
             {provider === "paste" ? (
               <button className="sb-btn sb-btn-primary" onClick={() => void copyRequest()}>
-                {copied ? "✓ Copied" : "Copy request"}
+                {copied ? "✓ Copied" : "Copy"}
               </button>
             ) : (
               <button className="sb-btn sb-btn-primary" onClick={() => void generate()} disabled={busy || !brief.trim()}>
-                {busy ? "Writing…" : `✦ Ask ${PROVIDER_LABEL[provider]}`}
+                {busy ? "Writing…" : "✦ Ask"}
               </button>
             )}
           </div>
@@ -187,7 +187,7 @@ function CoWriter({
                 onClick={() => {
                   const list = parsePrompts(pasted);
                   setResults(list);
-                  setPicked(new Set(list.map((_, i) => i)));
+                  setAdded(new Set());
                   setPasted("");
                 }}
               >
@@ -200,33 +200,46 @@ function CoWriter({
 
           {results.length > 0 && (
             <div className="sb-results">
+              <div className="sb-arch-row">
+                <span className="sb-results-hint">Drag blocks into the archive ↓</span>
+                <button className="sb-btn sb-btn-primary" onClick={addAll} disabled={added.size === results.length}>
+                  ＋ Add all, in order
+                </button>
+              </div>
               <ol>
                 {results.map((r, i) => (
-                  <li key={i} draggable onDragStart={(e) => e.dataTransfer.setData(DRAG_PROMPT, r)}>
-                    <input
-                      type="checkbox"
-                      checked={picked.has(i)}
-                      aria-label={`Keep beat ${i + 1}`}
-                      onChange={() =>
-                        setPicked((s) => {
-                          const n = new Set(s);
-                          if (n.has(i)) n.delete(i);
-                          else n.add(i);
-                          return n;
-                        })
+                  <li
+                    key={i}
+                    className={added.has(i) ? "is-added" : ""}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "copy";
+                      e.dataTransfer.setData(DRAG_PROMPT, r);
+                      e.dataTransfer.setData(DRAG_SOURCE, String(i));
+                      e.dataTransfer.setData("text/plain", r);
+                    }}
+                    onDragEnd={(e) => {
+                      if (e.dataTransfer.dropEffect !== "none" && droppedInArchive.current) {
+                        setAdded((s) => new Set(s).add(i));
                       }
-                    />
+                      droppedInArchive.current = false;
+                    }}
+                    title="Drag into the prompt archive"
+                  >
+                    <span className="sb-prompt-num">{i + 1}</span>
                     <span>{r}</span>
-                    <button title="Use now" onClick={() => onUse(r)}>→</button>
+                    <span className="sb-result-tools">
+                      {added.has(i) ? (
+                        <span className="sb-added">✓</span>
+                      ) : (
+                        <button title="Add to prompt archive" onClick={() => addOne(i)}>＋</button>
+                      )}
+                      <button title="Use now" onClick={() => onUse(r)}>→</button>
+                    </span>
                   </li>
                 ))}
               </ol>
-              <div className="sb-arch-row">
-                <button className="sb-link" onClick={() => setResults([])}>Discard</button>
-                <button className="sb-btn sb-btn-primary" onClick={addPicked} disabled={!picked.size}>
-                  ＋ Add {picked.size} to prompt archive
-                </button>
-              </div>
+              <button className="sb-link" onClick={() => setResults([])}>Clear results</button>
             </div>
           )}
         </div>
@@ -243,6 +256,14 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const dragId = useRef<string | null>(null);
 
+  const insertAt = (text: string, at: number) => {
+    droppedInArchive.current = true;
+    const next = [...prompts];
+    next.splice(at, 0, { id: Math.random().toString(36).slice(2, 10), text, source: "AI" });
+    onSetPrompts(next);
+  };
+  const [overEmpty, setOverEmpty] = useState(false);
+
   const move = (from: number, to: number) => {
     if (from === to || from < 0) return;
     const next = [...prompts];
@@ -252,7 +273,27 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
   };
 
   return (
-    <section className="sb-arch-card">
+    <section
+      className={`sb-arch-card ${overEmpty ? "is-drop" : ""}`}
+      onDragOverCapture={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_SOURCE)) return;
+        e.preventDefault();
+        setOverEmpty(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverEmpty(false);
+      }}
+      onDropCapture={(e) => {
+        // Capture phase so the "Add a prompt" input can't swallow the drop.
+        const text = e.dataTransfer.getData(DRAG_PROMPT);
+        setOverEmpty(false);
+        if (!text || !e.dataTransfer.types.includes(DRAG_SOURCE)) return;
+        if ((e.target as HTMLElement).closest(".sb-prompt-list li")) return; // row handles exact position
+        e.preventDefault();
+        e.stopPropagation();
+        insertAt(text, prompts.length);
+      }}
+    >
       <div className="sb-arch-head is-static">
         <span className="sb-section-label">Prompt archive</span>
         <span className="sb-arch-count">{prompts.length}</span>
@@ -295,16 +336,23 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
                 setOverIndex(null);
               }}
               onDragOver={(e) => {
-                if (!dragId.current) return;
+                if (!dragId.current && !e.dataTransfer.types.includes(DRAG_SOURCE)) return;
                 e.preventDefault();
+                e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
                 setOverIndex(e.clientY > rect.top + rect.height / 2 ? i + 1 : i);
               }}
               onDrop={(e) => {
-                if (!dragId.current) return;
                 e.preventDefault();
-                move(prompts.findIndex((x) => x.id === dragId.current), overIndex ?? i);
+                e.stopPropagation();
+                const at = overIndex ?? i;
                 setOverIndex(null);
+                if (dragId.current) {
+                  move(prompts.findIndex((x) => x.id === dragId.current), at);
+                  return;
+                }
+                const text = e.dataTransfer.getData(DRAG_PROMPT);
+                if (text) insertAt(text, at);
               }}
             >
               <span className="sb-grip" aria-hidden>⋮⋮</span>

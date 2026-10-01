@@ -14,7 +14,7 @@ The director will steer a real-time video generator (Visko Orbis) that renders O
 Write a sequence of short prompts — one per story beat — that the director can fire in order.
 Rules for every prompt:
 - 1–2 sentences, under 40 words, present tense, concrete and visual.
-- Describe what we SEE: subject action, camera move, framing, light, weather, atmosphere.
+- Open with the shot: framing/angle, lens and light (e.g. "Wide angle, 32mm, warm morning sun through the windows —"), then describe what we SEE: subject action, camera move, atmosphere.
 - Keep continuity with the previous beat (same place and characters unless the brief says otherwise).
 - No cuts, no scene numbers, no dialogue quotes, no camera jargon the model can't render (e.g. "smash cut").
 Return ONLY a JSON array of strings, nothing else.`;
