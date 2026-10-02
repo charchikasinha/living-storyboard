@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { NextResponse } from "next/server";
 
 import { COWRITER_SYSTEM, cowriterUserMessage, parsePrompts, type Provider } from "@/lib/cowriter";
@@ -94,10 +94,21 @@ async function askGemini(user: string) {
       const response = await ai.models.generateContent({
         model,
         contents: [{ text: user }],
-        config: { systemInstruction: COWRITER_SYSTEM, temperature: 0.8, maxOutputTokens: 1500 },
+        config: {
+          systemInstruction: COWRITER_SYSTEM,
+          temperature: 0.8,
+          maxOutputTokens: 4000,
+          // No hidden "thinking" — it was eating the output budget and cutting lists short.
+          thinkingConfig: { thinkingBudget: 0 },
+          // Ask for a real JSON array of strings so every beat comes back intact.
+          responseMimeType: "application/json",
+          responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
       });
       const text = response.text ?? "";
-      if (text.trim()) return text;
+      const truncated = response.candidates?.[0]?.finishReason === "MAX_TOKENS";
+      if (text.trim() && !truncated) return text;
+      if (truncated) tried.push(`${model}: reply was cut off`);
       break;
     } catch (error) {
       lastError = error;

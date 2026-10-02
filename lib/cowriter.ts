@@ -51,6 +51,13 @@ export function parsePrompts(raw: string): string[] {
   }
   return text
     .split(/\n+/)
-    .map((l) => l.replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "").replace(/^["“]|["”]$/g, "").trim())
-    .filter((l) => l.length > 3);
+    .map((l) =>
+      l
+        .replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "")
+        .trim()
+        .replace(/,$/, "")
+        .replace(/^["“]|["”]$/g, "")
+        .trim(),
+    )
+    .filter((l) => l.length > 3 && !/^[\[\]{}]$/.test(l));
 }
