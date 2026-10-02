@@ -23,6 +23,8 @@ type Props = {
   onAddImages: (files: File[]) => void;
   onRemoveImage: (id: string) => void;
   onUseImage: (image: ArchivedImage) => void;
+  onImagine: (text: string, label: string) => void;
+  imagining: string | null;
 };
 
 export function ArchivePanel(props: Props) {
@@ -264,7 +266,7 @@ function CoWriter({
 
 // ---------------------------------------------------------------------------
 
-function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Props) {
+function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt, onImagine, imagining }: Props) {
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -408,6 +410,13 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
               )}
               <span className="sb-prompt-tools">
                 <button title="Use now" onClick={() => fire(i)}>→</button>
+                <button
+                  title="Picture this — generate a still for the image archive"
+                  onClick={() => onImagine(p.text, `Prompt ${i + 1}`)}
+                  disabled={imagining !== null}
+                >
+                  {imagining === p.text ? "…" : "✦ Img"}
+                </button>
                 <button title="Move up" onClick={() => move(i, i - 1)} disabled={i === 0}>↑</button>
                 <button title="Move down" onClick={() => move(i, i + 2)} disabled={i === prompts.length - 1}>↓</button>
                 <button title="Remove" onClick={() => onSetPrompts(prompts.filter((x) => x.id !== p.id))}>✕</button>

@@ -840,6 +840,25 @@ function Studio({
   };
 
   const [presenting, setPresenting] = useState(false);
+  const [imagining, setImagining] = useState<string | null>(null);
+  const imagine = async (text: string, label: string) => {
+    setImagining(text);
+    setNotice(`Picturing ${label}… a still lands in the image archive in a few seconds.`);
+    try {
+      const res = await fetch("/api/imagine", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: text }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Couldn't generate a frame.");
+      await addArchiveImages([await res.blob()], [label]);
+      setNotice(`${label} is in the image archive — drag it onto the reference frame to start from it.`);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : "Couldn't generate a frame.");
+    } finally {
+      setImagining(null);
+    }
+  };
   const [boardOpen, setBoardOpen] = useState(false);
 
   const leaveLiveIfOtherBoard = async (nextId: string) => {
@@ -1019,6 +1038,8 @@ function Studio({
           onUsePrompt={usePrompt}
           onAddImages={(files) => void addArchiveImages(files)}
           onRemoveImage={(id) => updateBoard((b) => ({ ...b, imageArchive: b.imageArchive.filter((x) => x.id !== id) }))}
+          onImagine={(text, label) => void imagine(text, label)}
+          imagining={imagining}
           onUseImage={(img) => {
             updateShot(shot.id, (s) => ({ ...s, refImage: img.blob }));
             setNotice(`“${img.name}” is now the reference frame for ${shot.title || "this shot"}.`);
