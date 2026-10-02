@@ -73,10 +73,23 @@ const GEMINI_MODELS = [
   "gemini-2.5-flash-lite",
 ].filter((m, i, a): m is string => Boolean(m) && a.indexOf(m) === i);
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function describe(error: unknown) {
+  const raw = String(error instanceof Error ? error.message : error);
+  try {
+    const parsed = JSON.parse(raw) as { error?: { code?: number; status?: string; message?: string } };
+    if (parsed.error) return `${parsed.error.code ?? ""} ${parsed.error.status ?? ""}: ${parsed.error.message ?? ""}`.trim();
+  } catch {}
+  return raw.slice(0, 300);
+}
+
 async function askGemini(user: string) {
   const ai = new GoogleGenAI({ apiKey: key("GEMINI_API_KEY")! });
   let lastError: unknown = null;
+  const tried: string[] = [];
   for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const response = await ai.models.generateContent({
         model,
@@ -85,14 +98,29 @@ async function askGemini(user: string) {
       });
       const text = response.text ?? "";
       if (text.trim()) return text;
+      break;
     } catch (error) {
       lastError = error;
-      const msg = String(error instanceof Error ? error.message : error);
-      if (!/503|429|404|UNAVAILABLE|RESOURCE_EXHAUSTED|NOT_FOUND|overloaded|high demand/i.test(msg)) throw error;
+      const msg = describe(error);
+      tried.push(`${model}: ${msg}`);
+      console.warn(`[cowriter] ${model} failed: ${msg}`);
+      if (!/503|429|404|UNAVAILABLE|RESOURCE_EXHAUSTED|NOT_FOUND|overloaded|high demand/i.test(msg)) throw new Error(msg);
+      // Busy (503): wait briefly and retry this model once; otherwise move on.
+      if (/503|UNAVAILABLE|overloaded|high demand/i.test(msg) && attempt === 0) {
+        await sleep(1500);
+        continue;
+      }
+      break;
+    }
     }
   }
+  const quota = tried.some((t) => /429|RESOURCE_EXHAUSTED/i.test(t));
   throw new Error(
-    lastError ? "Gemini is busy right now — try again in a moment." : "Gemini returned an empty reply.",
+    !lastError
+      ? "Gemini returned an empty reply."
+      : quota
+        ? `Gemini's free quota is used up for now — wait a minute and try again. (${tried.at(-1)})`
+        : `Gemini is busy right now — try again in a moment. (${tried.at(-1)})`,
   );
 }
 
