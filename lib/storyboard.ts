@@ -1,6 +1,16 @@
 // Data model, direction vocabulary and browser helpers for the Living Storyboard.
 
-export type Still = { id: string; blob: Blob; createdAt: number; note?: string };
+/** A captured frame. Starred stills become panels on the production's storyboard. */
+export type Still = {
+  id: string;
+  blob: Blob;
+  createdAt: number;
+  note?: string;
+  starred?: boolean;
+  caption?: string; // the direction playing when it was captured (editable)
+  tags?: string; // e.g. "Tracking · Low angle · 35mm"
+  atMs?: number; // position on the tape, when known
+};
 export type Take = {
   id: string;
   blob: Blob;
@@ -58,7 +68,33 @@ export type Board = {
   updatedAt: number;
   promptArchive: ArchivedPrompt[];
   imageArchive: ArchivedImage[];
+  storyboard?: StoryboardLayout;
 };
+
+export type PanelFrame = "16:9" | "2.39:1" | "4:3";
+export type StoryboardLayout = { order: string[]; perRow: 2 | 3 | 4; frame: PanelFrame };
+export const DEFAULT_LAYOUT: StoryboardLayout = { order: [], perRow: 3, frame: "16:9" };
+
+export type Panel = { still: Still; shot: Shot; shotIndex: number };
+
+/** Starred stills in the director's order; new ones follow in shot order. */
+export function storyboardPanels(board: Board): Panel[] {
+  const all: Panel[] = [];
+  board.shots.forEach((shot, shotIndex) =>
+    [...shot.stills]
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .forEach((still) => still.starred && all.push({ still, shot, shotIndex })),
+  );
+  const order = board.storyboard?.order ?? [];
+  const rank = (p: Panel) => {
+    const i = order.indexOf(p.still.id);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  return all
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+    .map((x) => x.p);
+}
 
 export const uid = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -437,6 +473,7 @@ export function sanitizeBoard(board: Board): Board {
     ...board,
     promptArchive: board.promptArchive ?? [],
     imageArchive: board.imageArchive ?? [],
+    storyboard: { ...DEFAULT_LAYOUT, ...(board.storyboard ?? {}) },
     shots: board.shots.map((raw) => {
       const shot = { ...newShot(), ...raw };
       const segments = (shot.segments ?? []).filter((s) => s.blob && s.durationMs > 0);

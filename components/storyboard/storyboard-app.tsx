@@ -18,6 +18,7 @@ import { PresentMode } from "@/components/storyboard/present-mode";
 import { Projects } from "@/components/storyboard/projects";
 import { scriptLines } from "@/components/storyboard/script-panel";
 import { ShotList } from "@/components/storyboard/shot-list";
+import { StoryboardSheet } from "@/components/storyboard/storyboard-sheet";
 import { useSpeech } from "@/hooks/use-speech";
 import { frameAtVersion, type LiveTape, Timeline } from "@/components/storyboard/timeline";
 import { useOrbisSession } from "@/hooks/use-orbis-session";
@@ -53,6 +54,7 @@ import {
   type Version,
   versionLength,
   slug,
+  storyboardPanels,
   to16x9,
   uid,
 } from "@/lib/storyboard";
@@ -463,15 +465,20 @@ function Studio({
   const captureStill = async () => {
     let blob: Blob | null = null;
     let target = playingId;
+    let atMs: number | undefined;
+    let fromMark: string | null = null;
     if (cursor !== null && shot && activeVersion) {
       target = shot.id;
+      atMs = cursor;
       const review = stageRef.current?.querySelector(".sb-review-video") as HTMLVideoElement | null;
       blob = review?.videoWidth
         ? await grabFrame(review)
         : frameAtVersion(activeVersion, cursor, shot.segments, tapeForActive);
+      fromMark = markAt(activeVersion, cursor);
     } else {
       const video = liveVideo();
       if (video?.videoWidth) blob = await grabFrame(video);
+      if (tapeForActive && playingId === shot?.id) atMs = tapeForActive.ms;
     }
     if (!blob || !target) {
       setNotice("Nothing on screen to capture yet.");
@@ -480,11 +487,33 @@ function Studio({
     setFlash(true);
     setTimeout(() => setFlash(false), 180);
     const id = uid();
+    const here = target === shot?.id;
+    const caption = here
+      ? custom.trim() || (fromMark && !/^[▶⟲]/.test(fromMark) ? fromMark : "") || shot?.description || ""
+      : (lastDirection?.shotId === target ? lastDirection.text : "") || shots.find((x) => x.id === target)?.description || "";
+    const tags = here ? describeActive(active, "", controls) : "";
     updateShot(target, (s) => ({
       ...s,
-      stills: [...s.stills, { id, blob, createdAt: Date.now() }],
-      heroId: s.heroId ?? id,
+      stills: [...s.stills, { id, blob, createdAt: Date.now(), caption, tags, atMs }],
     }));
+    setNotice("Still captured — press ★ on it to put it on the storyboard.");
+  };
+
+  /** Text of the last direction mark at or before version-time t. */
+  const markAt = (v: Version, t: number) => {
+    let offset = 0;
+    for (const part of v.parts) {
+      const seg = shot?.segments.find((x) => x.id === part.segId);
+      const len = (part.to ?? (tapeForActive?.segId === part.segId ? tapeForActive.ms : 0)) - part.from;
+      if (t <= offset + len) {
+        const local = part.from + (t - offset);
+        const marks = tapeForActive?.segId === part.segId ? tapeForActive.marks : (seg?.marks ?? []);
+        const hit = [...marks].reverse().find((m) => m.t <= local);
+        return hit?.text ?? null;
+      }
+      offset += len;
+    }
+    return null;
   };
 
   // ---- Tape: record every live run, with frame snapshots for scrubbing ----
@@ -795,6 +824,7 @@ function Studio({
   };
 
   const [presenting, setPresenting] = useState(false);
+  const [boardOpen, setBoardOpen] = useState(false);
 
   const leaveLiveIfOtherBoard = async (nextId: string) => {
     if (board && board.id !== nextId && (session.runStarted || tapeRef.current)) await stopShot();
@@ -836,8 +866,10 @@ function Studio({
       <div className="sb" data-theme={theme} data-hints={hints ? "on" : "off"}>
         <div className="sb-topbar">
           <div className="sb-brand">
-            <span className="sb-logo" aria-hidden><i /><i /><i /></span>
-            <div className="sb-brand-name">Living Storyboard</div>
+            <span className="sb-wordmark">Living<br />Storyboard</span>
+          </div>
+          <div className="sb-topbar-title">
+            <span className="sb-eyebrow">Productions</span>
           </div>
           <div className="sb-topbar-actions">
             <span className={`sb-status sb-status-${session.runStarted ? "live" : session.status}`}>
@@ -886,18 +918,19 @@ function Studio({
       {/* ---------- Top bar ---------- */}
       <div className="sb-topbar">
         <div className="sb-brand">
-          <button className="sb-logo sb-logo-btn" onClick={() => setView("projects")} title="All productions" aria-label="All productions">
-            <i /><i /><i />
+          <button className="sb-wordmark" onClick={() => setView("projects")} title="All productions">
+            Living<br />Storyboard
           </button>
-          <div>
-            <button className="sb-eyebrow sb-crumb" onClick={() => setView("projects")}>← Productions</button>
-            <input
-              className="sb-board-title"
-              value={board.title}
-              aria-label="Production title"
-              onChange={(e) => updateBoard((b) => ({ ...b, title: e.target.value }))}
-            />
-          </div>
+          <button className="sb-eyebrow sb-crumb" onClick={() => setView("projects")}>← Productions</button>
+        </div>
+        <div className="sb-topbar-title">
+          <span className="sb-eyebrow">Production</span>
+          <input
+            className="sb-board-title"
+            value={board.title}
+            aria-label="Production title"
+            onChange={(e) => updateBoard((b) => ({ ...b, title: e.target.value }))}
+          />
         </div>
 
         <div className="sb-topbar-actions">
@@ -928,6 +961,9 @@ function Studio({
               Disconnect
             </button>
           )}
+          <button className="sb-btn sb-btn-board" onClick={() => setBoardOpen(true)} title="Open the storyboard — every starred still, in order">
+            Storyboard <span className="sb-count">{storyboardPanels(board).length}</span> ↗
+          </button>
           <button className="sb-btn" onClick={() => setPresenting(true)}>
             Present
           </button>
@@ -1136,6 +1172,12 @@ function Studio({
           <TakesGallery
             shot={shot}
             onHero={(id) => updateShot(shot.id, (s) => ({ ...s, heroId: s.heroId === id ? null : id }))}
+            onStar={(id) =>
+              updateShot(shot.id, (s) => ({
+                ...s,
+                stills: s.stills.map((x) => (x.id === id ? { ...x, starred: !x.starred } : x)),
+              }))
+            }
             onDeleteStill={(id) =>
               updateShot(shot.id, (s) => ({
                 ...s,
@@ -1316,28 +1358,20 @@ function Studio({
             ))}
           </div>
 
-          {/* 5. Sliders */}
-          <div className="sb-directions sb-sliders">
-            <div className="sb-section-label">Feel</div>
-            <Slider label="Move speed" left="Slow" right="Fast" color="#2f6bff" value={controls.speed} onChange={(v) => setControl("speed", v)} />
-            <Slider label="Warmth" left="Cool" right="Warm" color="#ff8a00" gradient="linear-gradient(90deg,#5aa9ff,#d8d8d8,#ffb347)" value={controls.warmth} onChange={(v) => setControl("warmth", v)} />
-            <Slider label="Light level" left="Dark" right="Bright" color="#111" gradient="linear-gradient(90deg,#111,#eee)" value={controls.key} onChange={(v) => setControl("key", v)} />
-          </div>
-
-          {/* 6. Folded extras */}
-          <details className="sb-fold">
-            <summary>Notes for cast &amp; crew{shot.notes ? " ·  ✓" : ""}</summary>
+          {/* Notebook: notes + log — kept apart, never sent to Orbis */}
+          <div className="sb-notebook">
+            <div className="sb-section-label">
+              Notebook <em>off the record — not sent to Orbis</em>
+            </div>
             <textarea
               rows={3}
               value={shot.notes}
-              placeholder="Intent, blocking, performance notes, props… shown in Present mode."
+              aria-label="Notes for cast and crew"
+              placeholder="Notes for cast & crew — intent, blocking, props… shown in Present mode."
               onChange={(e) => updateShot(shot.id, (s) => ({ ...s, notes: e.target.value }))}
             />
-          </details>
-          {shot.directions.length > 0 && (
-            <details className="sb-fold sb-history">
-              <summary>Direction log · {shot.directions.length}</summary>
-              <ol>
+            {shot.directions.length > 0 && (
+              <ol className="sb-log">
                 {[...shot.directions].reverse().slice(0, 12).map((d) => (
                   <li key={d.at}>
                     <time>{new Date(d.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
@@ -1345,10 +1379,24 @@ function Studio({
                   </li>
                 ))}
               </ol>
-            </details>
-          )}
+            )}
+          </div>
         </aside>
       </div>
+
+      {boardOpen && (
+        <StoryboardSheet
+          board={board}
+          onClose={() => setBoardOpen(false)}
+          onLayout={(storyboard) => updateBoard((b) => ({ ...b, storyboard }))}
+          onEditStill={(shotId, stillId, patch) =>
+            updateShot(shotId, (s) => ({
+              ...s,
+              stills: s.stills.map((x) => (x.id === stillId ? { ...x, ...patch } : x)),
+            }))
+          }
+        />
+      )}
 
       {presenting && (
         <PresentMode
@@ -1364,6 +1412,7 @@ function Studio({
 function TakesGallery({
   shot,
   onHero,
+  onStar,
   onDeleteStill,
   onDeleteTake,
   onUseAsReference,
@@ -1372,6 +1421,7 @@ function TakesGallery({
 }: {
   shot: Shot;
   onHero: (id: string) => void;
+  onStar: (id: string) => void;
   onDeleteStill: (id: string) => void;
   onDeleteTake: (id: string) => void;
   onUseAsReference: (blob: Blob) => void;
@@ -1390,7 +1440,7 @@ function TakesGallery({
   if (!items.length) {
     return (
       <div className="sb-takes-empty">
-        Stills you capture (live or while scrubbing the tape) collect here. Star one to make it the frame your crew sees.
+        Stills you capture (live or while scrubbing the tape) collect here. Press ★ on a still to put it on the storyboard.
       </div>
     );
   }
@@ -1399,7 +1449,7 @@ function TakesGallery({
   return (
     <div className="sb-takes">
       {items.map((item, i) => (
-        <figure key={item.id} className={`sb-take ${shot.heroId === item.id ? "is-hero" : ""}`}>
+        <figure key={item.id} className={`sb-take ${item.kind === "still" && item.starred ? "is-starred" : ""} ${shot.heroId === item.id ? "is-hero" : ""}`}>
           {item.kind === "still" ? (
             <img src={blobUrl(item.blob)} alt="" />
           ) : (
@@ -1409,7 +1459,18 @@ function TakesGallery({
             {item.kind === "still" ? "Still" : `Take · ${formatClock(item.durationMs)}`}
           </span>
           <figcaption>
-            <button title="Show this in Present mode" className={shot.heroId === item.id ? "is-on" : ""} onClick={() => onHero(item.id)}>★</button>
+            {item.kind === "still" ? (
+              <button
+                title={item.starred ? "On the storyboard — click to take it off" : "Add to the storyboard"}
+                aria-pressed={!!item.starred}
+                className={`sb-star ${item.starred ? "is-on" : ""}`}
+                onClick={() => onStar(item.id)}
+              >
+                {item.starred ? "★" : "☆"}
+              </button>
+            ) : (
+              <button title="Show this in Present mode" className={shot.heroId === item.id ? "is-on" : ""} onClick={() => onHero(item.id)}>★</button>
+            )}
             {item.kind === "still" && (
               <>
                 <button title="Use as this shot's reference frame" onClick={() => onUseAsReference(item.blob)}>⤒ Ref</button>
@@ -1454,47 +1515,5 @@ function ChipGroup({
         })}
       </div>
     </div>
-  );
-}
-
-/** Slider that commits on release, so dragging sends one direction, not dozens. */
-function Slider({
-  label,
-  left,
-  right,
-  color,
-  gradient,
-  value,
-  onChange,
-}: {
-  label: string;
-  left: string;
-  right: string;
-  color: string;
-  gradient?: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  const commit = () => draft !== value && onChange(draft);
-  return (
-    <label className="sb-slider" style={{ ["--accent" as string]: color, ["--track" as string]: gradient ?? "var(--surface-2)" }}>
-      <span className="sb-slider-label">{label}</span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={draft}
-        onChange={(e) => setDraft(+e.target.value)}
-        onPointerUp={commit}
-        onKeyUp={commit}
-        onBlur={commit}
-      />
-      <span className="sb-slider-ends">
-        <span>{left}</span>
-        <span>{right}</span>
-      </span>
-    </label>
   );
 }
