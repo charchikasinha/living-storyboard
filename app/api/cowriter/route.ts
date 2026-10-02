@@ -68,9 +68,10 @@ async function askOpenAI(user: string) {
 const GEMINI_MODELS = [
   process.env.GEMINI_TEXT_MODEL,
   "gemini-3.5-flash",
-  "gemini-2.5-flash",
+  "gemini-3.5-flash-lite",
   "gemini-flash-latest",
-  "gemini-2.5-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash",
 ].filter((m, i, a): m is string => Boolean(m) && a.indexOf(m) === i);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -118,7 +119,7 @@ async function askGemini(user: string) {
       if (!/503|429|404|UNAVAILABLE|RESOURCE_EXHAUSTED|NOT_FOUND|overloaded|high demand/i.test(msg)) throw new Error(msg);
       // Busy (503): wait briefly and retry this model once; otherwise move on.
       if (/503|UNAVAILABLE|overloaded|high demand/i.test(msg) && attempt === 0) {
-        await sleep(1500);
+        await sleep(2000);
         continue;
       }
       break;
@@ -126,12 +127,15 @@ async function askGemini(user: string) {
     }
   }
   const quota = tried.some((t) => /429|RESOURCE_EXHAUSTED/i.test(t));
+  // Report the most telling failure: busy beats quota beats "model retired".
+  const busy = tried.find((t) => /503|UNAVAILABLE|overloaded|high demand/i.test(t));
+  const shown = busy ?? tried.find((t) => /429|RESOURCE_EXHAUSTED/i.test(t)) ?? tried.at(-1);
   throw new Error(
     !lastError
       ? "Gemini returned an empty reply."
       : quota
-        ? `Gemini's free quota is used up for now — wait a minute and try again. (${tried.at(-1)})`
-        : `Gemini is busy right now — try again in a moment. (${tried.at(-1)})`,
+        ? `Gemini's free quota is used up for now — wait a minute and try again. (${shown})`
+        : `Gemini is busy right now — try again in a moment. (${shown})`,
   );
 }
 
