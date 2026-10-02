@@ -1,6 +1,6 @@
 "use client";
 
-import type { DragEvent } from "react";
+import { type DragEvent, useEffect, useState } from "react";
 
 import { blobUrl } from "@/components/storyboard/blob-url";
 import { coverFor } from "@/components/storyboard/storyboard-app";
@@ -25,12 +25,61 @@ export function shotStatus(shot: Shot, live: boolean) {
 }
 
 export function ShotList({ shots, selectedId, liveId, onSelect, onAdd, onMove, onDelete, onDropRef }: Props) {
+  // Collapsed by default: a slim row of text tabs leaves more room for the picture.
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("sb-shots-open") === "1") setOpen(true);
+    } catch {}
+  }, []);
+  const toggle = () =>
+    setOpen((o) => {
+      try {
+        localStorage.setItem("sb-shots-open", o ? "0" : "1");
+      } catch {}
+      return !o;
+    });
+
+  if (!open) {
+    return (
+      <nav className="sb-shotlist sb-shotlist-slim" aria-label="Shot list">
+        <button className="sb-shotlist-toggle" onClick={toggle} aria-expanded={false} title="Show shot thumbnails">
+          Shots ▸
+        </button>
+        <ol className="sb-shot-tabs">
+          {shots.map((s, i) => {
+            const selected = s.id === selectedId;
+            return (
+              <li key={s.id}>
+                <button
+                  className={`${selected ? "is-selected" : ""} ${s.id === liveId ? "is-live" : ""}`}
+                  onClick={() => onSelect(s.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={onDropRef(s.id)}
+                  aria-current={selected}
+                >
+                  <span className="sb-shot-tab-num">{String(i + 1).padStart(2, "0")}</span>
+                  {s.title || `Shot ${i + 1}`}
+                  {s.id === liveId && <span className="sb-shot-tab-live">● live</span>}
+                </button>
+              </li>
+            );
+          })}
+          <li>
+            <button className="sb-shot-tab-add" onClick={onAdd} title="New shot">
+              ＋ Shot
+            </button>
+          </li>
+        </ol>
+      </nav>
+    );
+  }
+
   return (
     <nav className="sb-shotlist" aria-label="Shot list">
-      <div className="sb-shotlist-head">
-        <span className="sb-section-label">Shot list</span>
-        <button className="sb-icon-btn sb-icon-sm" onClick={onAdd} title="New shot" aria-label="New shot">
-          ＋
+      <div className="sb-shotlist-bar">
+        <button className="sb-shotlist-toggle" onClick={toggle} aria-expanded title="Hide shot thumbnails">
+          Shots ▾
         </button>
       </div>
       <ol className="sb-shotlist-items">
@@ -65,10 +114,13 @@ export function ShotList({ shots, selectedId, liveId, onSelect, onAdd, onMove, o
             </li>
           );
         })}
+        <li>
+          <button className="sb-shot-add" onClick={onAdd}>
+            <span className="sb-shot-add-frame">＋</span>
+            <span className="sb-shot-name">New shot</span>
+          </button>
+        </li>
       </ol>
-      <button className="sb-shot-add" onClick={onAdd}>
-        ＋ New shot
-      </button>
     </nav>
   );
 }

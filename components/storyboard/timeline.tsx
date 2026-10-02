@@ -231,14 +231,12 @@ export function Timeline(props: Props) {
             );
           })}
           <button
-            className="sb-take-card sb-take-branch"
+            className="sb-branch-link"
             onClick={props.onRedirect}
             disabled={!props.canRedirect || props.busy}
             title="Keep the take up to the playhead and shoot a new continuation"
           >
-            <span>⑂</span>
-            Branch take
-            <small>from {formatClock(head)}</small>
+            ⑂ Branch a new take from {formatClock(head)}
           </button>
         </div>
       )}

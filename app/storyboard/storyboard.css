@@ -2211,3 +2211,157 @@
 .sb .sb-topbar .sb-btn-primary { background: var(--accent-deep); border-color: var(--accent-deep); color: #fff; }
 .sb .sb-topbar .sb-btn-primary:hover:not(:disabled) { background: #b23a14; }
 .sb .sb-archive .sb-arch-body > textarea { min-height: 92px; }
+
+/* ---- v7.1: polish round ---- */
+.sb-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Brand: the wordmark is the way home */
+.sb .sb-home-link { position: relative; display: block; }
+.sb-home-hint {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  color: var(--char-muted);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.sb .sb-home-link:hover .sb-home-hint,
+.sb .sb-home-link:focus-visible .sb-home-hint { opacity: 1; }
+.sb .sb-home-link:hover { color: #fff; }
+
+/* One rule for typing: if you can type in it, it's a filled box */
+.sb .sb-tell textarea,
+.sb .sb-notebook textarea,
+.sb .sb-setting-line input:focus,
+.sb .sb-pnl-caption:focus,
+.sb .sb-pnl-note:focus {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0;
+}
+.sb .sb-tell textarea { padding: 9px 11px; }
+.sb .sb-notebook textarea { padding: 8px 10px; background: var(--bg); }
+.sb .sb-tell textarea:focus,
+.sb .sb-notebook textarea:focus,
+.sb .sb-setting-line input:focus {
+  outline: none;
+  background: var(--surface);
+  border-color: var(--ink);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.sb .sb-shot-title:hover,
+.sb .sb-board-title:hover,
+.sb .sb-setting-line input:hover { background: var(--surface); }
+.sb .sb-shot-title:focus,
+.sb .sb-board-title:focus { outline: none; background: var(--surface); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* Setting = the shot's subtitle (the anchor for every direction) */
+.sb-panel-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sb .sb-setting-line { display: block; }
+.sb .sb-setting-line input {
+  width: 100%;
+  padding: 3px 4px;
+  margin-left: -4px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--ink-2);
+  border: 1px solid transparent;
+}
+.sb .sb-setting-line.is-drop input { outline: 2px dashed var(--accent); }
+
+/* Shots: collapsible */
+.sb-stage-col .sb-shotlist { flex-direction: column; gap: 6px; }
+.sb .sb-shotlist-toggle {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding: 6px 10px 6px 0;
+  white-space: nowrap;
+}
+.sb .sb-shotlist-toggle:hover { color: var(--accent-deep); }
+.sb-shotlist-slim { flex-direction: row !important; align-items: center; border-bottom: 1px solid var(--line); }
+.sb-shot-tabs { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; align-items: stretch; }
+.sb .sb-shot-tabs button {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.sb .sb-shot-tabs button:hover { background: var(--surface); color: var(--ink); }
+.sb .sb-shot-tabs button.is-selected { color: var(--ink); border-bottom-color: var(--accent); }
+.sb-shot-tab-num { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+.sb-shot-tab-live { font-family: var(--mono); font-size: 10px; color: var(--accent-deep); }
+.sb .sb-shot-tabs .sb-shot-tab-add { color: var(--ink-3); font-weight: 500; }
+.sb-stage-col .sb-shotlist-items { border-top: 0; }
+
+/* Shot cards: quiet badges, text actions, "new shot" card the same size */
+.sb-shot-status,
+.sb-shot-status.is-wip,
+.sb-shot-status.is-draft,
+.sb-shot-status.is-done {
+  background: var(--bg);
+  color: var(--ink);
+  border: 0;
+}
+.sb-shot-status.is-live { background: var(--accent); color: #fff; }
+.sb-shot-index { border-radius: 0; font-family: var(--mono); font-weight: 500; }
+.sb .sb-shot-tools button,
+.sb-stage-col .sb-shot-tools button {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.sb .sb-shot-tools button:hover:not(:disabled) { color: var(--ink); }
+.sb .sb-shot-tools .sb-danger { color: var(--accent-deep); margin-left: auto; }
+.sb .sb-stage-col .sb-shot-add {
+  width: 136px;
+  height: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  text-align: left;
+}
+.sb-shot-add-frame {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  font-size: 18px;
+  border: 1px dashed var(--ink-3);
+}
+.sb .sb-stage-col .sb-shot-add:hover { color: var(--ink); }
+.sb .sb-stage-col .sb-shot-add:hover .sb-shot-add-frame { border-color: var(--ink); background: var(--surface); }
+
+/* Takes: "branch" is a text action, not a fake card */
+.sb .sb-branch-link {
+  align-self: center;
+  padding: 6px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 1px solid var(--ink);
+  white-space: nowrap;
+}
+.sb .sb-branch-link:hover:not(:disabled) { color: var(--accent-deep); border-color: var(--accent-deep); }
+.sb .sb-branch-link:disabled { color: var(--ink-3); border-color: var(--line); opacity: 1; }
+.sb .sb-branch-link { flex: none; margin-left: 6px; }

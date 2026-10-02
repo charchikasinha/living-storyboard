@@ -918,13 +918,12 @@ function Studio({
       {/* ---------- Top bar ---------- */}
       <div className="sb-topbar">
         <div className="sb-brand">
-          <button className="sb-wordmark" onClick={() => setView("projects")} title="All productions">
+          <button className="sb-wordmark sb-home-link" onClick={() => setView("projects")} aria-label="Living Storyboard — back to all productions">
             Living<br />Storyboard
+            <span className="sb-home-hint">← All productions</span>
           </button>
-          <button className="sb-eyebrow sb-crumb" onClick={() => setView("projects")}>← Productions</button>
         </div>
         <div className="sb-topbar-title">
-          <span className="sb-eyebrow">Production</span>
           <input
             className="sb-board-title"
             value={board.title}
@@ -1135,9 +1134,6 @@ function Studio({
               <button className="sb-btn" onClick={() => void captureStill()} disabled={!playing && cursor === null}>
                 ◉ Capture still
               </button>
-              <button className="sb-icon-btn" onClick={session.toggleMuted} title="Sound">
-                {session.muted ? "🔇" : "🔊"}
-              </button>
             </div>
           </div>
 
@@ -1208,37 +1204,40 @@ function Studio({
           {/* 1. Shot + setting */}
           <div className="sb-panel-head">
             <span className="sb-shot-num">{String(selectedIndex + 1).padStart(2, "0")}</span>
-            <input
-              className="sb-shot-title"
-              value={shot.title}
-              placeholder={`Shot ${selectedIndex + 1}`}
-              onChange={(e) => updateShot(shot.id, (s) => ({ ...s, title: e.target.value }))}
-            />
+            <div className="sb-panel-head-text">
+              <input
+                className="sb-shot-title"
+                value={shot.title}
+                aria-label="Shot title"
+                placeholder={`Shot ${selectedIndex + 1}`}
+                onChange={(e) => updateShot(shot.id, (s) => ({ ...s, title: e.target.value }))}
+              />
+              <label
+                className={`sb-setting-line ${dropHint === "scene" ? "is-drop" : ""}`}
+                title="The setting — who and where. It anchors every direction you send."
+                onDragOver={(e) => {
+                  if (!acceptsPrompt(e)) return;
+                  e.preventDefault();
+                  setDropHint("scene");
+                }}
+                onDragLeave={() => setDropHint(null)}
+                onDrop={(e) => {
+                  const text = e.dataTransfer.getData(DRAG_PROMPT);
+                  if (!text) return;
+                  e.preventDefault();
+                  setDropHint(null);
+                  updateShot(shot.id, (s) => ({ ...s, description: text }));
+                }}
+              >
+                <span className="sb-visually-hidden">Setting</span>
+                <input
+                  value={shot.description}
+                  placeholder="Setting — who and where, e.g. a golden retriever in a sunny living room"
+                  onChange={(e) => updateShot(shot.id, (s) => ({ ...s, description: e.target.value }))}
+                />
+              </label>
+            </div>
           </div>
-          <label
-            className={`sb-setting ${dropHint === "scene" ? "is-drop" : ""}`}
-            title="The fixed setup of this shot — included in every prompt"
-            onDragOver={(e) => {
-              if (!acceptsPrompt(e)) return;
-              e.preventDefault();
-              setDropHint("scene");
-            }}
-            onDragLeave={() => setDropHint(null)}
-            onDrop={(e) => {
-              const text = e.dataTransfer.getData(DRAG_PROMPT);
-              if (!text) return;
-              e.preventDefault();
-              setDropHint(null);
-              updateShot(shot.id, (s) => ({ ...s, description: text }));
-            }}
-          >
-            <span>Setting</span>
-            <input
-              value={shot.description}
-              placeholder="Who and where — e.g. a golden retriever in a sunny living room"
-              onChange={(e) => updateShot(shot.id, (s) => ({ ...s, description: e.target.value }))}
-            />
-          </label>
 
           {/* 2. Direction: type or hold to speak */}
           <div
@@ -1291,7 +1290,7 @@ function Studio({
                   onPointerUp={speech.stop}
                   onPointerLeave={() => speech.listening && speech.stop()}
                 >
-                  🎙 {speech.listening ? "Listening…" : "Hold to speak"}
+                  <MicIcon /> {speech.listening ? "Listening…" : "Hold to speak"}
                 </button>
                 <button className="sb-btn sb-btn-primary" type="submit">
                   {isLiveHere ? "⚡ Direct" : "Set"}
@@ -1515,5 +1514,15 @@ function ChipGroup({
         })}
       </div>
     </div>
+  );
+}
+
+/** Thin line microphone, drawn in the current text colour. */
+function MicIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden>
+      <rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" />
+      <path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2.2M5.6 14.7h4.8" />
+    </svg>
   );
 }
