@@ -128,8 +128,6 @@ GEMINI_API_KEY=your_gemini_api_key        # optional: co-writer and ✦ Img
 
 ## Honest limitations
 
-- Orbis renders **one continuous shot**: cuts are modelled as separate shots, not
-  edits inside one.
 - Work is stored **in the browser that made it**; there are no accounts or sync
   yet. Takes can be exported as video files, and the storyboard as a PDF.
 - **Hold to speak** uses the Web Speech API (Chrome).
