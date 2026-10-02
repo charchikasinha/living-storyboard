@@ -1678,3 +1678,8 @@
   .sb-shelf-feature { min-height: 380px; }
   .sb-spines { height: 220px; overflow-x: auto; }
 }
+
+/* Columns scroll instead of squashing their contents (keeps the stage 16:9). */
+.sb .sb-workspace-3 > .sb-stage-col > *,
+.sb .sb-workspace-3 > .sb-archive > *,
+.sb .sb-workspace-3 > .sb-panel > * { flex-shrink: 0; }
