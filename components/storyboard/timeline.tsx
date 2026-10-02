@@ -111,6 +111,7 @@ export function Timeline(props: Props) {
 
   return (
     <div className="sb-tape">
+      <div className={`sb-tape-band ${isLive && cursor === null ? "is-live" : ""}`}>
       <div className="sb-tape-head">
         <span className="sb-section-label">
           Tape · Take {version.n}
@@ -197,9 +198,14 @@ export function Timeline(props: Props) {
         </div>
       </div>
 
+      </div>
+
       {versions.length > 0 && (
+        <div className="sb-takes-block">
+        <div className="sb-tape-head">
+          <span className="sb-section-label">Takes · {versions.length}</span>
+        </div>
         <div className="sb-takes-strip">
-          <span className="sb-takes-label">Takes</span>
           {[...versions].sort((a, b) => a.n - b.n).map((v) => {
             const p = versions.find((x) => x.id === v.parentId);
             const isActive = v.id === version.id;
@@ -238,6 +244,7 @@ export function Timeline(props: Props) {
           >
             ⑂ Branch a new take from {formatClock(head)}
           </button>
+        </div>
         </div>
       )}
     </div>

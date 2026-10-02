@@ -200,19 +200,20 @@ function Studio({
     </button>
   );
 
-  // ---- Shot pills: fold away (remembered) ----
-  const [shotOpen, setShotOpen] = useState(true);
+  // ---- Pill groups (Camera, Framing, …) fold away one by one (remembered) ----
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
   useEffect(() => {
     try {
-      if (localStorage.getItem("sb-shot-open") === "0") setShotOpen(false);
+      setFolded(JSON.parse(localStorage.getItem("sb-folded") || "{}"));
     } catch {}
   }, []);
-  const toggleShotOpen = () =>
-    setShotOpen((o) => {
+  const toggleFold = (id: string) =>
+    setFolded((f) => {
+      const next = { ...f, [id]: !f[id] };
       try {
-        localStorage.setItem("sb-shot-open", o ? "0" : "1");
+        localStorage.setItem("sb-folded", JSON.stringify(next));
       } catch {}
-      return !o;
+      return next;
     });
 
   // ---- Direction state for the selected shot ----
@@ -881,7 +882,7 @@ function Studio({
       <div className="sb" data-theme={theme} data-hints={hints ? "on" : "off"}>
         <div className="sb-topbar">
           <div className="sb-brand">
-            <span className="sb-wordmark">Living<br />Storyboard</span>
+            <span className="sb-wordmark">Living Storyboard</span>
           </div>
           <div className="sb-topbar-title">
             <span className="sb-eyebrow">Productions</span>
@@ -933,10 +934,10 @@ function Studio({
       {/* ---------- Top bar ---------- */}
       <div className="sb-topbar">
         <div className="sb-brand">
-          <button className="sb-wordmark sb-home-link" onClick={() => setView("projects")} aria-label="Living Storyboard — back to all productions">
-            Living<br />Storyboard
-            <span className="sb-home-hint">← All productions</span>
+          <button className="sb-wordmark sb-home-link" onClick={() => setView("projects")} title="All productions" aria-label="Living Storyboard — back to all productions">
+            Living Storyboard
           </button>
+          <span className="sb-brand-sep" aria-hidden>/</span>
         </div>
         <div className="sb-topbar-title">
           <input
@@ -1231,32 +1232,36 @@ function Studio({
                 placeholder={`Shot ${selectedIndex + 1}`}
                 onChange={(e) => updateShot(shot.id, (s) => ({ ...s, title: e.target.value }))}
               />
-              <label
-                className={`sb-setting-line ${dropHint === "scene" ? "is-drop" : ""}`}
-                title="The setting — who and where. It anchors every direction you send."
-                onDragOver={(e) => {
-                  if (!acceptsPrompt(e)) return;
-                  e.preventDefault();
-                  setDropHint("scene");
-                }}
-                onDragLeave={() => setDropHint(null)}
-                onDrop={(e) => {
-                  const text = e.dataTransfer.getData(DRAG_PROMPT);
-                  if (!text) return;
-                  e.preventDefault();
-                  setDropHint(null);
-                  updateShot(shot.id, (s) => ({ ...s, description: text }));
-                }}
-              >
-                <span className="sb-visually-hidden">Setting</span>
-                <input
-                  value={shot.description}
-                  placeholder="Setting — who and where, e.g. a golden retriever in a sunny living room"
-                  onChange={(e) => updateShot(shot.id, (s) => ({ ...s, description: e.target.value }))}
-                />
-              </label>
             </div>
           </div>
+
+          {/* Setting: the anchor for every direction */}
+          <label
+            className={`sb-setting-block ${dropHint === "scene" ? "is-drop" : ""}`}
+            onDragOver={(e) => {
+              if (!acceptsPrompt(e)) return;
+              e.preventDefault();
+              setDropHint("scene");
+            }}
+            onDragLeave={() => setDropHint(null)}
+            onDrop={(e) => {
+              const text = e.dataTransfer.getData(DRAG_PROMPT);
+              if (!text) return;
+              e.preventDefault();
+              setDropHint(null);
+              updateShot(shot.id, (s) => ({ ...s, description: text }));
+            }}
+          >
+            <span className="sb-section-label">
+              Setting <em>who &amp; where — anchors every direction</em>
+            </span>
+            <textarea
+              rows={2}
+              value={shot.description}
+              placeholder="e.g. a golden retriever in a sunny living room"
+              onChange={(e) => updateShot(shot.id, (s) => ({ ...s, description: e.target.value }))}
+            />
+          </label>
 
           {/* 2. Direction: type or hold to speak */}
           <div
@@ -1351,31 +1356,25 @@ function Studio({
           </div>
 
           {/* 4. Pills */}
-          <div className={`sb-directions ${shotOpen ? "" : "is-folded"}`}>
-            <button className="sb-section-label sb-fold-toggle" onClick={toggleShotOpen} aria-expanded={shotOpen}>
-              Shot {shotOpen ? "▾" : "▸"}
-              {!shotOpen && <em>{describeActive(active, "", controls) || "no camera notes"}</em>}
-            </button>
+          <div className="sb-directions">
+            <div className="sb-section-label">Shot</div>
             {DIRECTION_GROUPS.filter((g) => g.id === "camera" || g.id === "shot").map((group) => (
-              <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
+              <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} folded={!!folded[group.id]} onFold={() => toggleFold(group.id)} />
             ))}
-            <div className="sb-chip-group" style={{ ["--accent" as string]: "#111" }}>
-              <span className="sb-chip-label">Lens</span>
-              <div className="sb-chips">
-                {LENSES.map((l) => (
-                  <button
-                    key={l.label}
-                    className={`sb-chip sb-chip-lens ${controls.lens === l.label ? "is-on" : ""}`}
-                    aria-pressed={controls.lens === l.label}
-                    onClick={() => setControl("lens", controls.lens === l.label ? "" : l.label)}
-                  >
-                    {l.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <PillRow label="Lens" folded={!!folded.lens} onFold={() => toggleFold("lens")} summary={controls.lens}>
+              {LENSES.map((l) => (
+                <button
+                  key={l.label}
+                  className={`sb-chip sb-chip-lens ${controls.lens === l.label ? "is-on" : ""}`}
+                  aria-pressed={controls.lens === l.label}
+                  onClick={() => setControl("lens", controls.lens === l.label ? "" : l.label)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </PillRow>
             {DIRECTION_GROUPS.filter((g) => g.id === "mood").map((group) => (
-              <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
+              <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} folded={!!folded[group.id]} onFold={() => toggleFold(group.id)} />
             ))}
           </div>
 
@@ -1512,29 +1511,56 @@ function ChipGroup({
   group,
   active,
   onToggle,
+  folded,
+  onFold,
 }: {
   group: (typeof DIRECTION_GROUPS)[number];
   active: ActiveDirections;
   onToggle: (groupId: string, label: string) => void;
+  folded: boolean;
+  onFold: () => void;
+}) {
+  const picked = active[group.id] ?? [];
+  return (
+    <PillRow label={group.label} folded={folded} onFold={onFold} summary={picked.join(" · ")}>
+      {group.chips.map((chip) => {
+        const on = picked.includes(chip.label);
+        return (
+          <button key={chip.label} className={`sb-chip ${on ? "is-on" : ""}`} aria-pressed={on} onClick={() => onToggle(group.id, chip.label)}>
+            {chip.label}
+          </button>
+        );
+      })}
+    </PillRow>
+  );
+}
+
+/** A labelled row of pills; click the label to fold the pills away (the choice still shows). */
+function PillRow({
+  label,
+  folded,
+  onFold,
+  summary,
+  children,
+}: {
+  label: string;
+  folded: boolean;
+  onFold: () => void;
+  summary: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="sb-chip-group" style={{ ["--accent" as string]: group.color }}>
-      <span className="sb-chip-label">{group.label}</span>
-      <div className="sb-chips">
-        {group.chips.map((chip) => {
-          const on = (active[group.id] ?? []).includes(chip.label);
-          return (
-            <button
-              key={chip.label}
-              className={`sb-chip ${on ? "is-on" : ""}`}
-              aria-pressed={on}
-              onClick={() => onToggle(group.id, chip.label)}
-            >
-              {chip.label}
-            </button>
-          );
-        })}
-      </div>
+    <div className={`sb-chip-group ${folded ? "is-folded" : ""}`}>
+      <button className="sb-chip-label sb-chip-fold" onClick={onFold} aria-expanded={!folded} title={folded ? `Show ${label} options` : `Hide ${label} options`}>
+        {label} <span aria-hidden>{folded ? "▸" : "▾"}</span>
+      </button>
+      {folded ? (
+        <button className="sb-chip-summary" onClick={onFold}>
+          {summary || "—"}
+        </button>
+      ) : (
+        <div className="sb-chips">{children}</div>
+      )}
     </div>
   );
 }

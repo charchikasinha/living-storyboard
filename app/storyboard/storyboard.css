@@ -2420,3 +2420,69 @@
   padding-top: 14px;
   border-top: 1px solid var(--line-strong);
 }
+
+/* ---- v7.3 ---- */
+/* One light strip across the top: wordmark / production name … actions */
+.sb-topbar { grid-template-columns: auto minmax(0, 1fr) auto; min-height: 54px; background: var(--bg); }
+.sb-brand { background: transparent; color: var(--ink); padding: 0 0 0 20px; gap: 12px; justify-content: flex-start; }
+.sb .sb-wordmark { color: var(--ink); font-size: 18px; line-height: 1; white-space: nowrap; }
+.sb .sb-home-link:hover { color: var(--accent-deep); }
+.sb-brand-sep { font-size: 22px; font-weight: 300; color: var(--ink-3); }
+.sb-topbar-title { padding: 0 16px 0 12px; }
+.sb .sb-board-title { font-size: 18px; }
+.sb-topbar-title .sb-eyebrow { font-size: 11px; color: var(--ink-3); }
+
+/* Setting: its own block, same filled box as Direction */
+.sb .sb-setting-block { display: flex; flex-direction: column; gap: 6px; }
+.sb .sb-setting-block textarea {
+  width: 100%;
+  padding: 8px 11px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  resize: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.sb .sb-setting-block textarea:focus { outline: none; border-color: var(--ink); box-shadow: inset 3px 0 0 var(--accent); }
+.sb .sb-setting-block.is-drop textarea { outline: 2px dashed var(--accent); }
+
+/* Set = orange */
+.sb .sb-tell-actions .sb-btn-primary { background: var(--accent-deep); border-color: var(--accent-deep); color: #fff; }
+.sb .sb-tell-actions .sb-btn-primary:hover:not(:disabled) { background: #b23a14; }
+
+/* Camera / Framing / Lens / Mood fold one by one */
+.sb .sb-chip-fold { display: flex; gap: 4px; align-items: baseline; text-align: left; cursor: pointer; white-space: nowrap; }
+.sb .sb-chip-fold:hover { color: var(--ink); }
+.sb .sb-chip-fold span { font-size: 9px; }
+.sb .sb-chip-summary { padding: 5px 0; font-size: 12px; font-weight: 600; color: var(--ink-2); text-align: left; cursor: pointer; }
+.sb-chip-group.is-folded { align-items: baseline; }
+
+/* Reel: the tape sits on orange; takes are their own block below */
+.sb-reel { margin: 4px 0 0; padding: 0; background: none; border: 0; animation: none; gap: 14px; }
+.sb-reel.is-live { background: none; animation: none; }
+.sb-tape { display: flex; flex-direction: column; gap: 14px; }
+.sb-tape-band {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 -12px;
+  padding: 12px 12px 12px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  border-top: 2px solid color-mix(in srgb, var(--accent) 50%, var(--bg));
+}
+.sb-tape-band.is-live { background: color-mix(in srgb, var(--accent) 18%, var(--bg)); border-top-color: var(--accent); animation: sb-reel-pulse 2.4s ease-in-out infinite; }
+.sb-takes-block { display: flex; flex-direction: column; gap: 8px; }
+.sb-takes-label { display: none; }
+.sb .sb-chip-fold {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-top: 6px;
+}
+@media (max-width: 1000px) {
+  .sb-topbar { display: flex; flex-wrap: wrap; padding: 8px 0; }
+  .sb-topbar-actions { flex-wrap: wrap; }
+}
