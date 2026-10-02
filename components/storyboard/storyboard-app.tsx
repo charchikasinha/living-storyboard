@@ -173,6 +173,31 @@ function Studio({
       return next;
     });
 
+  // ---- Hints (helper text) on/off ----
+  const [hints, setHints] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("sb-hints") === "off") setHints(false);
+    } catch {}
+  }, []);
+  const toggleHints = () =>
+    setHints((h) => {
+      try {
+        localStorage.setItem("sb-hints", h ? "off" : "on");
+      } catch {}
+      return !h;
+    });
+  const hintsButton = (
+    <button
+      className={`sb-icon-btn sb-hints-btn ${hints ? "is-on" : ""}`}
+      onClick={toggleHints}
+      aria-pressed={hints}
+      title={hints ? "Hide hints and example text" : "Show hints and example text"}
+    >
+      ?
+    </button>
+  );
+
   // ---- Direction state for the selected shot ----
   const [dirs, setDirs] = useState<
     Record<string, { active: ActiveDirections; custom: string; draft: string; controls: Controls }>
@@ -803,12 +828,12 @@ function Studio({
   };
 
   if (!boards) {
-    return <div className="sb" data-theme={theme}><div className="sb-loading">Loading…</div></div>;
+    return <div className="sb" data-theme={theme} data-hints={hints ? "on" : "off"}><div className="sb-loading">Loading…</div></div>;
   }
 
   if (view === "projects" || !board || !shot) {
     return (
-      <div className="sb" data-theme={theme}>
+      <div className="sb" data-theme={theme} data-hints={hints ? "on" : "off"}>
         <div className="sb-topbar">
           <div className="sb-brand">
             <span className="sb-logo" aria-hidden><i /><i /><i /></span>
@@ -819,6 +844,7 @@ function Studio({
               <span className="dot" />
               {session.runStarted ? "Live" : session.connected ? "Connected" : "Offline"}
             </span>
+            {hintsButton}
             <button className="sb-icon-btn" onClick={toggleTheme} aria-label="Toggle dark mode">{theme === "light" ? "☾" : "☀"}</button>
           </div>
         </div>
@@ -856,7 +882,7 @@ function Studio({
         : status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
-    <div className="sb" data-theme={theme}>
+    <div className="sb" data-theme={theme} data-hints={hints ? "on" : "off"}>
       {/* ---------- Top bar ---------- */}
       <div className="sb-topbar">
         <div className="sb-brand">
@@ -905,6 +931,7 @@ function Studio({
           <button className="sb-btn" onClick={() => setPresenting(true)}>
             Present
           </button>
+          {hintsButton}
           <button
             className="sb-icon-btn"
             onClick={toggleTheme}

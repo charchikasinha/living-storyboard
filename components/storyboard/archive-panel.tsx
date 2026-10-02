@@ -3,7 +3,7 @@
 import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 
 import { blobUrl } from "@/components/storyboard/blob-url";
-import { copyPasteRequest, parsePrompts, PROVIDER_LABEL, type Provider } from "@/lib/cowriter";
+import { copyPasteRequest, parsePrompts, type Provider } from "@/lib/cowriter";
 import type { ArchivedImage, ArchivedPrompt } from "@/lib/storyboard";
 
 /** Drag payload types shared with the drop targets in the studio. */
@@ -23,13 +23,6 @@ type Props = {
   onAddImages: (files: File[]) => void;
   onRemoveImage: (id: string) => void;
   onUseImage: (image: ArchivedImage) => void;
-};
-
-const ALL: Provider[] = ["claude", "openai", "gemini"];
-const KEY_NAME: Record<Provider, string> = {
-  claude: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GEMINI_API_KEY",
 };
 
 export function ArchivePanel(props: Props) {
@@ -53,15 +46,15 @@ function CoWriter({
   onAdd: (texts: string[], source: string) => void;
   onUse: (text: string) => void;
 }) {
-  const [available, setAvailable] = useState<Provider[] | null>(null);
-  const [provider, setProvider] = useState<Provider | "paste">("paste");
+  const [geminiReady, setGeminiReady] = useState<boolean | null>(null);
+  const [mode, setMode] = useState<"gemini" | "manual">("manual");
   const [brief, setBrief] = useState("");
+  const [manual, setManual] = useState("");
   const [count, setCount] = useState(6);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<string[]>([]);
   const [added, setAdded] = useState<Set<number>>(new Set());
-  const [pasted, setPasted] = useState("");
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(true);
 
@@ -69,22 +62,22 @@ function CoWriter({
     void fetch("/api/cowriter")
       .then((r) => r.json())
       .then((d: { providers?: Provider[] }) => {
-        const list = d.providers ?? [];
-        setAvailable(list);
-        if (list.length) setProvider(list[0]);
+        const ok = (d.providers ?? []).includes("gemini");
+        setGeminiReady(ok);
+        if (ok) setMode("gemini");
       })
-      .catch(() => setAvailable([]));
+      .catch(() => setGeminiReady(false));
   }, []);
 
   const generate = async () => {
-    if (!brief.trim() || provider === "paste") return;
+    if (!brief.trim()) return;
     setBusy(true);
     setError("");
     try {
       const res = await fetch("/api/cowriter", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, brief, scene, count }),
+        body: JSON.stringify({ provider: "gemini", brief, scene, count }),
       });
       const data = (await res.json()) as { prompts?: string[]; error?: string };
       if (!res.ok || !data.prompts) throw new Error(data.error || "Co-writer failed");
@@ -97,22 +90,32 @@ function CoWriter({
     }
   };
 
+  const makeBlocks = () => {
+    const list = parsePrompts(manual);
+    if (!list.length) return;
+    setResults(list);
+    setAdded(new Set());
+    setManual("");
+  };
+
+  // Escape hatch without a key: copy a ready-made request for Claude / ChatGPT.
   const copyRequest = async () => {
-    if (!brief.trim()) {
-      setError("Describe what you want first.");
+    const topic = manual.trim() || scene.trim();
+    if (!topic) {
+      setError("Write a line about the scene first, then copy the request.");
       return;
     }
     setError("");
     try {
-      await navigator.clipboard.writeText(copyPasteRequest(brief, scene, count));
+      await navigator.clipboard.writeText(copyPasteRequest(topic, scene, count));
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      setError("Couldn't copy — select the brief and copy it manually.");
+      setError("Couldn't copy to the clipboard.");
     }
   };
 
-  const source = provider === "paste" ? "Pasted" : PROVIDER_LABEL[provider];
+  const source = mode === "gemini" ? "Gemini" : "Manual";
   const addOne = (i: number) => {
     onAdd([results[i]], source);
     setAdded((s) => new Set(s).add(i));
@@ -126,74 +129,85 @@ function CoWriter({
 
   return (
     <section className="sb-arch-card">
-      <button className="sb-arch-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="sb-section-label">Co-writer</span>
-        <span className="sb-arch-caret">{open ? "−" : "+"}</span>
-      </button>
+      <div className="sb-arch-head">
+        <button className="sb-arch-title" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          <span className="sb-section-label">Co-writer</span>
+          <span className="sb-arch-caret">{open ? "−" : "+"}</span>
+        </button>
+        <select
+          className="sb-select sb-mode"
+          value={mode}
+          aria-label="How to write prompts"
+          onChange={(e) => {
+            setMode(e.target.value as "gemini" | "manual");
+            setError("");
+          }}
+        >
+          <option value="gemini" disabled={!geminiReady}>
+            Gemini{geminiReady === false ? " — add key" : ""}
+          </option>
+          <option value="manual">Manual</option>
+        </select>
+      </div>
+
       {open && (
         <div className="sb-arch-body">
-          <textarea
-            rows={3}
-            value={brief}
-            placeholder="Describe the scene, e.g. A golden retriever plays with a red ball at home; a woman in a white summer dress brings his food; he jumps on her, then eats."
-            onChange={(e) => setBrief(e.target.value)}
-          />
-          <div className="sb-arch-row sb-cw-controls">
-            <select
-              className="sb-select"
-              value={provider}
-              aria-label="AI model"
-              onChange={(e) => setProvider(e.target.value as Provider | "paste")}
-            >
-              {ALL.map((p) => (
-                <option key={p} value={p} disabled={!available?.includes(p)}>
-                  {PROVIDER_LABEL[p]}
-                  {available?.includes(p) ? "" : " — add key"}
-                </option>
-              ))}
-              <option value="paste">Copy &amp; paste</option>
-            </select>
-            <label className="sb-count">
-              Beats
-              <select value={count} onChange={(e) => setCount(+e.target.value)}>
-                {[3, 4, 6, 8, 10].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {provider === "paste" ? (
-              <button className="sb-btn sb-btn-primary" onClick={() => void copyRequest()}>
-                {copied ? "✓ Copied" : "Copy"}
-              </button>
-            ) : (
-              <button className="sb-btn sb-btn-primary" onClick={() => void generate()} disabled={busy || !brief.trim()}>
-                {busy ? "Writing…" : "✦ Ask"}
-              </button>
-            )}
-          </div>
-
-          {provider === "paste" && (
-            <div className="sb-paste">
-              <p>
-                Paste the copied request into <a href="https://claude.ai/new" target="_blank" rel="noreferrer">Claude</a> or{" "}
-                <a href="https://chatgpt.com/" target="_blank" rel="noreferrer">ChatGPT</a>, then paste its reply here:
-              </p>
-              <textarea rows={3} value={pasted} placeholder="Paste the numbered list…" onChange={(e) => setPasted(e.target.value)} />
-              <button
-                className="sb-btn"
-                disabled={!pasted.trim()}
-                onClick={() => {
-                  const list = parsePrompts(pasted);
-                  setResults(list);
-                  setAdded(new Set());
-                  setPasted("");
+          {mode === "gemini" ? (
+            <>
+              <label className="sb-cw-label" htmlFor="sb-brief">
+                ✦ Ask Gemini for prompts
+              </label>
+              <textarea
+                id="sb-brief"
+                rows={3}
+                value={brief}
+                placeholder="Describe the scene you want prompts for — e.g. a golden retriever plays with a red ball; a woman in a white summer dress brings his food; he jumps on her, then eats."
+                onChange={(e) => setBrief(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void generate();
                 }}
-              >
-                Read reply
-              </button>
-            </div>
+              />
+              <div className="sb-arch-row sb-cw-controls">
+                <label className="sb-count">
+                  Beats
+                  <select value={count} onChange={(e) => setCount(+e.target.value)}>
+                    {[3, 4, 6, 8, 10].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button className="sb-btn sb-btn-primary" onClick={() => void generate()} disabled={busy || !brief.trim()}>
+                  {busy ? "Writing…" : "✦ Ask Gemini"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="sb-cw-label" htmlFor="sb-manual">
+                Write or paste prompts — one per line
+              </label>
+              <textarea
+                id="sb-manual"
+                rows={4}
+                value={manual}
+                placeholder={"1. Wide angle, 32mm — the dog plays with a red ball.\n2. Low angle — she brings his food in a pan.\n3. He jumps on her, then starts eating."}
+                onChange={(e) => setManual(e.target.value)}
+              />
+              <div className="sb-arch-row sb-cw-controls">
+                <button
+                  className="sb-link sb-copy-req"
+                  onClick={() => void copyRequest()}
+                  title="Copies a ready-made request you can paste into Claude or ChatGPT; paste their reply back here"
+                >
+                  {copied ? "✓ Request copied" : "Copy a request for Claude"}
+                </button>
+                <button className="sb-btn sb-btn-primary" onClick={makeBlocks} disabled={!manual.trim()}>
+                  Make blocks
+                </button>
+              </div>
+            </>
           )}
 
           {error && <p className="sb-field-error">{error}</p>}
@@ -239,7 +253,7 @@ function CoWriter({
                   </li>
                 ))}
               </ol>
-              <button className="sb-link" onClick={() => setResults([])}>Clear results</button>
+              <button className="sb-link" onClick={() => setResults([])}>Clear blocks</button>
             </div>
           )}
         </div>
