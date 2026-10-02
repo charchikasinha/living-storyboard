@@ -1,16 +1,6 @@
-import { OrbisDemo } from "@/components/orbis-demo";
+import { redirect } from "next/navigation";
 
+// The app lives at /storyboard; the original Orbis starter demo is kept at /starter.
 export default function Home() {
-  return (
-    <main>
-      <header>
-        <h1>Orbis starter</h1>
-        <p>
-          Connect, generate a continuous live video, then steer it by changing
-          the prompt while it runs.
-        </p>
-      </header>
-      <OrbisDemo />
-    </main>
-  );
+  redirect("/storyboard");
 }
