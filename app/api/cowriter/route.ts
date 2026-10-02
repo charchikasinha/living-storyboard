@@ -64,14 +64,36 @@ async function askOpenAI(user: string) {
   return data.choices?.[0]?.message?.content ?? "";
 }
 
+// Tried in order; a busy (503), rate-limited (429) or unknown (404) model falls through to the next.
+const GEMINI_MODELS = [
+  process.env.GEMINI_TEXT_MODEL,
+  "gemini-3.5-flash",
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+].filter((m, i, a): m is string => Boolean(m) && a.indexOf(m) === i);
+
 async function askGemini(user: string) {
   const ai = new GoogleGenAI({ apiKey: key("GEMINI_API_KEY")! });
-  const response = await ai.models.generateContent({
-    model: process.env.GEMINI_TEXT_MODEL || "gemini-3.5-flash",
-    contents: [{ text: user }],
-    config: { systemInstruction: COWRITER_SYSTEM, temperature: 0.8, maxOutputTokens: 1500 },
-  });
-  return response.text ?? "";
+  let lastError: unknown = null;
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ text: user }],
+        config: { systemInstruction: COWRITER_SYSTEM, temperature: 0.8, maxOutputTokens: 1500 },
+      });
+      const text = response.text ?? "";
+      if (text.trim()) return text;
+    } catch (error) {
+      lastError = error;
+      const msg = String(error instanceof Error ? error.message : error);
+      if (!/503|429|404|UNAVAILABLE|RESOURCE_EXHAUSTED|NOT_FOUND|overloaded|high demand/i.test(msg)) throw error;
+    }
+  }
+  throw new Error(
+    lastError ? "Gemini is busy right now — try again in a moment." : "Gemini returned an empty reply.",
+  );
 }
 
 export async function POST(request: Request) {
