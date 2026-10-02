@@ -2365,3 +2365,58 @@
 .sb .sb-branch-link:hover:not(:disabled) { color: var(--accent-deep); border-color: var(--accent-deep); }
 .sb .sb-branch-link:disabled { color: var(--ink-3); border-color: var(--line); opacity: 1; }
 .sb .sb-branch-link { flex: none; margin-left: 6px; }
+
+/* ---- v7.2 ---- */
+/* Quieter action buttons */
+.sb .sb-archive .sb-fire {
+  height: 30px;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: #f3a07e;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+}
+.sb .sb-archive .sb-fire:hover:not(:disabled) { background: rgb(228 87 46 / 0.14); color: #fff; }
+.sb .sb-tell-actions .sb-btn { height: 30px; padding: 0 12px; font-size: 12px; }
+.sb .sb-transport .sb-btn { height: 30px; padding: 0 12px; font-size: 12px; font-weight: 600; }
+.sb .sb-transport .sb-btn-primary { background: transparent; color: var(--accent-deep); border-color: var(--accent-deep); }
+.sb .sb-transport .sb-btn-primary:hover:not(:disabled) { background: var(--accent-tint); color: var(--ink); }
+.sb[data-theme="dark"] .sb-transport .sb-btn-primary { color: #f3a07e; border-color: #f3a07e; }
+
+/* Shot pills fold away; the rest of the panel stays put */
+.sb .sb-fold-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.sb .sb-fold-toggle em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-directions.is-folded > :not(.sb-fold-toggle) { display: none; }
+
+/* Stills: no frames — the orange star says it's on the storyboard */
+.sb-take,
+.sb-take.is-hero,
+.sb-take.is-starred { border: 0; outline: none; }
+
+/* The reel: tape + takes sit on a faded orange strip; it glows when live */
+.sb-reel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px -12px 0;
+  padding: 12px 12px 10px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  border-top: 2px solid color-mix(in srgb, var(--accent) 45%, var(--bg));
+}
+.sb-reel.is-live {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg));
+  border-top-color: var(--accent);
+  animation: sb-reel-pulse 2.4s ease-in-out infinite;
+}
+@keyframes sb-reel-pulse {
+  50% { border-top-color: color-mix(in srgb, var(--accent) 35%, var(--bg)); }
+}
+.sb-reel .sb-tape { margin: 0; }
+.sb-stills {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-strong);
+}

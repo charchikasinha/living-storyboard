@@ -200,6 +200,21 @@ function Studio({
     </button>
   );
 
+  // ---- Shot pills: fold away (remembered) ----
+  const [shotOpen, setShotOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("sb-shot-open") === "0") setShotOpen(false);
+    } catch {}
+  }, []);
+  const toggleShotOpen = () =>
+    setShotOpen((o) => {
+      try {
+        localStorage.setItem("sb-shot-open", o ? "0" : "1");
+      } catch {}
+      return !o;
+    });
+
   // ---- Direction state for the selected shot ----
   const [dirs, setDirs] = useState<
     Record<string, { active: ActiveDirections; custom: string; draft: string; controls: Controls }>
@@ -1137,6 +1152,7 @@ function Studio({
             </div>
           </div>
 
+          <section className={`sb-reel ${isLiveHere && cursor === null ? "is-live" : ""}`} aria-label="Tape and takes">
           <Timeline
             version={activeVersion}
             versions={shot.versions}
@@ -1163,8 +1179,10 @@ function Studio({
             onExport={(id) => void exportActive(id)}
             onDelete={deleteVersion}
           />
+          </section>
 
-          <div className="sb-section-label">Stills · {shot.title || `Shot ${selectedIndex + 1}`}</div>
+          <section className="sb-stills" aria-label="Stills">
+          <div className="sb-section-label">Stills · {shot.title || `Shot ${selectedIndex + 1}`} <em>★ puts a still on the storyboard</em></div>
           <TakesGallery
             shot={shot}
             onHero={(id) => updateShot(shot.id, (s) => ({ ...s, heroId: s.heroId === id ? null : id }))}
@@ -1197,6 +1215,7 @@ function Studio({
               addShot({ refImage: blob, description: shot.description }, selectedIndex)
             }
           />
+          </section>
         </section>
 
         {/* ---------- Direction panel ---------- */}
@@ -1332,8 +1351,11 @@ function Studio({
           </div>
 
           {/* 4. Pills */}
-          <div className="sb-directions">
-            <div className="sb-section-label">Shot</div>
+          <div className={`sb-directions ${shotOpen ? "" : "is-folded"}`}>
+            <button className="sb-section-label sb-fold-toggle" onClick={toggleShotOpen} aria-expanded={shotOpen}>
+              Shot {shotOpen ? "▾" : "▸"}
+              {!shotOpen && <em>{describeActive(active, "", controls) || "no camera notes"}</em>}
+            </button>
             {DIRECTION_GROUPS.filter((g) => g.id === "camera" || g.id === "shot").map((group) => (
               <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
             ))}
@@ -1360,7 +1382,7 @@ function Studio({
           {/* Notebook: notes + log — kept apart, never sent to Orbis */}
           <div className="sb-notebook">
             <div className="sb-section-label">
-              Notebook <em>off the record — not sent to Orbis</em>
+              Director&rsquo;s notes <em>not sent to Orbis</em>
             </div>
             <textarea
               rows={3}
