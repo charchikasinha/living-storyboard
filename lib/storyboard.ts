@@ -142,21 +142,6 @@ export const DIRECTION_GROUPS: DirectionGroup[] = [
     ],
   },
   {
-    id: "light",
-    label: "Light",
-    color: "#ff8a00",
-    exclusive: true,
-    chips: [
-      { label: "Golden hour", prompt: "warm golden-hour sunlight" },
-      { label: "Blue hour", prompt: "cool blue-hour twilight" },
-      { label: "Night", prompt: "night, lit by practical lights" },
-      { label: "Neon", prompt: "saturated neon lighting" },
-      { label: "Candlelight", prompt: "flickering candlelight" },
-      { label: "Hard noon", prompt: "harsh midday sun with hard shadows" },
-      { label: "Silhouette", prompt: "strong backlight turning the subject into a silhouette" },
-    ],
-  },
-  {
     id: "mood",
     label: "Mood",
     color: "#ff2d6f",
@@ -168,18 +153,6 @@ export const DIRECTION_GROUPS: DirectionGroup[] = [
       { label: "Joyful", prompt: "warm, joyful energy" },
       { label: "Eerie", prompt: "eerie, unsettling stillness" },
       { label: "Epic", prompt: "grand, epic scale" },
-    ],
-  },
-  {
-    id: "world",
-    label: "World",
-    color: "#00b37e",
-    exclusive: false,
-    chips: [
-      { label: "Snow", prompt: "snow drifts down" },
-      { label: "Wind", prompt: "strong wind moves through the scene" },
-      { label: "Dust", prompt: "dust particles hang in the light" },
-      { label: "Crowd", prompt: "people move through the background" },
     ],
   },
 ];

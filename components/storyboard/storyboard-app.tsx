@@ -16,7 +16,7 @@ import { blobUrl } from "@/components/storyboard/blob-url";
 import { ChainPlayer, exportVersion } from "@/components/storyboard/chain-player";
 import { PresentMode } from "@/components/storyboard/present-mode";
 import { Projects } from "@/components/storyboard/projects";
-import { ScriptPanel, scriptLines } from "@/components/storyboard/script-panel";
+import { scriptLines } from "@/components/storyboard/script-panel";
 import { ShotList } from "@/components/storyboard/shot-list";
 import { useSpeech } from "@/hooks/use-speech";
 import { frameAtVersion, type LiveTape, Timeline } from "@/components/storyboard/timeline";
@@ -1135,7 +1135,8 @@ function Studio({
         </section>
 
         {/* ---------- Direction panel ---------- */}
-        <aside className="sb-panel">
+        <aside className="sb-panel sb-panel-clean">
+          {/* 1. Shot + setting */}
           <div className="sb-panel-head">
             <span className="sb-shot-num">{String(selectedIndex + 1).padStart(2, "0")}</span>
             <input
@@ -1145,17 +1146,32 @@ function Studio({
               onChange={(e) => updateShot(shot.id, (s) => ({ ...s, title: e.target.value }))}
             />
           </div>
+          <label
+            className={`sb-setting ${dropHint === "scene" ? "is-drop" : ""}`}
+            title="The fixed setup of this shot — included in every prompt"
+            onDragOver={(e) => {
+              if (!acceptsPrompt(e)) return;
+              e.preventDefault();
+              setDropHint("scene");
+            }}
+            onDragLeave={() => setDropHint(null)}
+            onDrop={(e) => {
+              const text = e.dataTransfer.getData(DRAG_PROMPT);
+              if (!text) return;
+              e.preventDefault();
+              setDropHint(null);
+              updateShot(shot.id, (s) => ({ ...s, description: text }));
+            }}
+          >
+            <span>Setting</span>
+            <input
+              value={shot.description}
+              placeholder="Who and where — e.g. a golden retriever in a sunny living room"
+              onChange={(e) => updateShot(shot.id, (s) => ({ ...s, description: e.target.value }))}
+            />
+          </label>
 
-          <div className="sb-tabs sb-panel-tabs" role="tablist">
-            <button role="tab" aria-selected={panelTab === "direct"} className={panelTab === "direct" ? "is-on" : ""} onClick={() => setPanelTab("direct")}>
-              Direct the scene
-            </button>
-            <button role="tab" aria-selected={panelTab === "script"} className={panelTab === "script" ? "is-on" : ""} onClick={() => setPanelTab("script")}>
-              Script{scriptLines(shot.script).length ? ` · ${scriptLines(shot.script).length}` : ""}
-            </button>
-          </div>
-
-          {/* Tell the scene: type or hold to speak — always visible */}
+          {/* 2. Direction: type or hold to speak */}
           <div
             className={`sb-tell ${dropHint === "tell" ? "is-drop" : ""}`}
             onDragOver={(e) => {
@@ -1173,7 +1189,7 @@ function Studio({
             }}
           >
             <div className="sb-section-label">
-              Tell the scene {isLiveHere ? <em className="sb-live-hint">live — lands in ~2s</em> : <em>applies when you shoot</em>}
+              Direction {isLiveHere ? <em className="sb-live-hint">live — lands in ~2s</em> : <em>what happens now</em>}
             </div>
             <form
               onSubmit={(e) => {
@@ -1182,9 +1198,9 @@ function Studio({
               }}
             >
               <textarea
-                rows={2}
+                rows={3}
                 value={speech.listening ? speech.interim : customDraft}
-                placeholder="She hesitates at the ledge — hold the silence, then bring the sirens in under the rain."
+                placeholder="Type, speak, or drop a prompt from the archive — e.g. the dog jumps on her happily, then starts eating."
                 onChange={(e) => setCustomDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -1206,10 +1222,10 @@ function Studio({
                   onPointerUp={speech.stop}
                   onPointerLeave={() => speech.listening && speech.stop()}
                 >
-                  🎙 {speech.listening ? "Listening… release to send" : "Hold to speak"}
+                  🎙 {speech.listening ? "Listening…" : "Hold to speak"}
                 </button>
                 <button className="sb-btn sb-btn-primary" type="submit">
-                  {isLiveHere ? "⚡ Direct live" : "Set"}
+                  {isLiveHere ? "⚡ Direct" : "Set"}
                 </button>
               </div>
               {speech.error && <p className="sb-field-error">{speech.error}</p>}
@@ -1221,141 +1237,88 @@ function Studio({
             )}
           </div>
 
-          {panelTab === "script" ? (
-            <ScriptPanel
-              shot={shot}
-              live={isLiveHere}
-              follow={followScript}
-              sent={sentLines[shot.id] ?? new Set()}
-              onFollow={setFollowScript}
-              onChangeScript={(text) => updateShot(shot.id, (s) => ({ ...s, script: text, scriptLine: 0 }))}
-              onGoToLine={goToLine}
-              onOnceMore={() => steerAgain(`↻ Once more — ${custom || "line"}`)}
-            />
-          ) : (
-            <>
-              <label
-                className={`sb-field ${dropHint === "scene" ? "is-drop" : ""}`}
-                onDragOver={(e) => {
-                  if (!acceptsPrompt(e)) return;
-                  e.preventDefault();
-                  setDropHint("scene");
-                }}
-                onDragLeave={() => setDropHint(null)}
-                onDrop={(e) => {
-                  const text = e.dataTransfer.getData(DRAG_PROMPT);
-                  if (!text) return;
-                  e.preventDefault();
-                  setDropHint(null);
-                  updateShot(shot.id, (s) => ({ ...s, description: text }));
-                }}
-              >
-                <span>Scene</span>
-                <textarea
-                  rows={3}
-                  value={shot.description}
-                  placeholder="Who, where, what happens. e.g. A detective lights a cigarette under a flickering streetlamp."
-                  onChange={(e) => updateShot(shot.id, (s) => ({ ...s, description: e.target.value }))}
-                />
-              </label>
-
-              <div
-                className={`sb-field sb-ref ${dropHint === "ref" ? "is-drop" : ""}`}
-                onDragOver={(e) => {
-                  if (!acceptsImage(e)) return;
-                  e.preventDefault();
-                  setDropHint("ref");
-                }}
-                onDragLeave={() => setDropHint(null)}
-                onDrop={onDropRef(shot.id)}
-              >
-                <span>Reference frame</span>
-                {shot.refImage ? (
-                  <div className="sb-ref-row">
-                    <img src={blobUrl(shot.refImage)} alt="Reference" />
-                    <div className="sb-ref-actions">
-                      <label className="sb-link">
-                        Replace
-                        <input type="file" accept="image/*" hidden onChange={(e: ChangeEvent<HTMLInputElement>) => void setReference(shot.id, e.target.files?.[0])} />
-                      </label>
-                      <button className="sb-link" onClick={() => updateShot(shot.id, (s) => ({ ...s, refImage: null }))}>
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <label className="sb-dropzone">
-                    <input type="file" accept="image/*" hidden onChange={(e: ChangeEvent<HTMLInputElement>) => void setReference(shot.id, e.target.files?.[0])} />
-                    Drop a sketch, location photo or mood frame
-                    <small>or click to browse · auto-cropped to 16:9</small>
-                  </label>
-                )}
-              </div>
-
-              <div className="sb-directions">
-                {DIRECTION_GROUPS.filter((g) => g.id === "camera").map((group) => (
-                  <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
-                ))}
-                <Slider label="Move speed" left="Slow" right="Fast" color="#2f6bff" value={controls.speed} onChange={(v) => setControl("speed", v)} />
-                {DIRECTION_GROUPS.filter((g) => g.id === "shot").map((group) => (
-                  <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
-                ))}
-                <div className="sb-chip-group" style={{ ["--accent" as string]: "#111" }}>
-                  <span className="sb-chip-label">Lens</span>
-                  <div className="sb-chips">
-                    {LENSES.map((l) => (
-                      <button
-                        key={l.label}
-                        className={`sb-chip sb-chip-lens ${controls.lens === l.label ? "is-on" : ""}`}
-                        aria-pressed={controls.lens === l.label}
-                        onClick={() => setControl("lens", controls.lens === l.label ? "" : l.label)}
-                      >
-                        {l.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="sb-section-label sb-subhead">Light &amp; atmosphere</div>
-                <Slider label="Key warmth" left="Cool" right="Warm" color="#ff8a00" gradient="linear-gradient(90deg,#5aa9ff,#d8d8d8,#ffb347)" value={controls.warmth} onChange={(v) => setControl("warmth", v)} />
-                <Slider label="Light level" left="Low-key" right="High-key" color="#111" gradient="linear-gradient(90deg,#111,#eee)" value={controls.key} onChange={(v) => setControl("key", v)} />
-                <Slider label="Haze" left="Clear" right="Thick" color="#8b8b87" value={controls.haze} onChange={(v) => setControl("haze", v)} />
-                <Slider label="Rain" left="Dry" right="Downpour" color="#00b37e" value={controls.rain} onChange={(v) => setControl("rain", v)} />
-
-                {DIRECTION_GROUPS.filter((g) => g.id !== "camera" && g.id !== "shot").map((group) => (
-                  <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
-                ))}
-
-                <details className="sb-prompt-preview">
-                  <summary>Prompt sent to Orbis</summary>
-                  <p>{prompt || "—"}</p>
-                </details>
-              </div>
-
-              <label className="sb-field">
-                <span>Notes for cast &amp; crew</span>
-                <textarea
-                  rows={3}
-                  value={shot.notes}
-                  placeholder="Intent, blocking, performance notes, props… shown in Present mode."
-                  onChange={(e) => updateShot(shot.id, (s) => ({ ...s, notes: e.target.value }))}
-                />
-              </label>
-
-              {shot.directions.length > 0 && (
-                <div className="sb-history">
-                  <div className="sb-section-label">Direction log</div>
-                  <ol>
-                    {[...shot.directions].reverse().slice(0, 8).map((d) => (
-                      <li key={d.at}>
-                        <time>{new Date(d.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
-                        {d.text}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
+          {/* 3. Reference frame (compact) */}
+          <div
+            className={`sb-ref-compact ${dropHint === "ref" ? "is-drop" : ""}`}
+            onDragOver={(e) => {
+              if (!acceptsImage(e)) return;
+              e.preventDefault();
+              setDropHint("ref");
+            }}
+            onDragLeave={() => setDropHint(null)}
+            onDrop={onDropRef(shot.id)}
+          >
+            <label className="sb-ref-thumb" title="Drop an image here, or click to choose">
+              <input type="file" accept="image/*" hidden onChange={(e: ChangeEvent<HTMLInputElement>) => void setReference(shot.id, e.target.files?.[0])} />
+              {shot.refImage ? <img src={blobUrl(shot.refImage)} alt="Reference frame" /> : <span>＋</span>}
+            </label>
+            <div className="sb-ref-text">
+              <span className="sb-section-label">Reference frame</span>
+              <span>{shot.refImage ? "Orbis starts from this image." : "Optional — drop an image from the archive."}</span>
+              {shot.refImage && (
+                <button className="sb-link" onClick={() => updateShot(shot.id, (s) => ({ ...s, refImage: null }))}>
+                  Remove
+                </button>
               )}
-            </>
+            </div>
+          </div>
+
+          {/* 4. Pills */}
+          <div className="sb-directions">
+            <div className="sb-section-label">Shot</div>
+            {DIRECTION_GROUPS.filter((g) => g.id === "camera" || g.id === "shot").map((group) => (
+              <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
+            ))}
+            <div className="sb-chip-group" style={{ ["--accent" as string]: "#111" }}>
+              <span className="sb-chip-label">Lens</span>
+              <div className="sb-chips">
+                {LENSES.map((l) => (
+                  <button
+                    key={l.label}
+                    className={`sb-chip sb-chip-lens ${controls.lens === l.label ? "is-on" : ""}`}
+                    aria-pressed={controls.lens === l.label}
+                    onClick={() => setControl("lens", controls.lens === l.label ? "" : l.label)}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {DIRECTION_GROUPS.filter((g) => g.id === "mood").map((group) => (
+              <ChipGroup key={group.id} group={group} active={active} onToggle={toggleChip} />
+            ))}
+          </div>
+
+          {/* 5. Sliders */}
+          <div className="sb-directions sb-sliders">
+            <div className="sb-section-label">Feel</div>
+            <Slider label="Move speed" left="Slow" right="Fast" color="#2f6bff" value={controls.speed} onChange={(v) => setControl("speed", v)} />
+            <Slider label="Warmth" left="Cool" right="Warm" color="#ff8a00" gradient="linear-gradient(90deg,#5aa9ff,#d8d8d8,#ffb347)" value={controls.warmth} onChange={(v) => setControl("warmth", v)} />
+            <Slider label="Light level" left="Dark" right="Bright" color="#111" gradient="linear-gradient(90deg,#111,#eee)" value={controls.key} onChange={(v) => setControl("key", v)} />
+          </div>
+
+          {/* 6. Folded extras */}
+          <details className="sb-fold">
+            <summary>Notes for cast &amp; crew{shot.notes ? " ·  ✓" : ""}</summary>
+            <textarea
+              rows={3}
+              value={shot.notes}
+              placeholder="Intent, blocking, performance notes, props… shown in Present mode."
+              onChange={(e) => updateShot(shot.id, (s) => ({ ...s, notes: e.target.value }))}
+            />
+          </details>
+          {shot.directions.length > 0 && (
+            <details className="sb-fold sb-history">
+              <summary>Direction log · {shot.directions.length}</summary>
+              <ol>
+                {[...shot.directions].reverse().slice(0, 12).map((d) => (
+                  <li key={d.at}>
+                    <time>{new Date(d.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                    {d.text}
+                  </li>
+                ))}
+              </ol>
+            </details>
           )}
         </aside>
       </div>

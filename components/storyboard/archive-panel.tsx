@@ -263,6 +263,15 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
     onSetPrompts(next);
   };
   const [overEmpty, setOverEmpty] = useState(false);
+  // "Fire next": step through the archive in order, like a shooting script.
+  const [next, setNext] = useState(0);
+  const nextIndex = Math.min(next, Math.max(0, prompts.length - 1));
+  const fire = (i: number) => {
+    const p = prompts[i];
+    if (!p) return;
+    onUsePrompt(p.text);
+    setNext(i + 1 >= prompts.length ? 0 : i + 1);
+  };
 
   const move = (from: number, to: number) => {
     if (from === to || from < 0) return;
@@ -296,7 +305,13 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
     >
       <div className="sb-arch-head is-static">
         <span className="sb-section-label">Prompt archive</span>
-        <span className="sb-arch-count">{prompts.length}</span>
+        {prompts.length > 0 ? (
+          <button className="sb-btn sb-btn-primary sb-fire" onClick={() => fire(nextIndex)} title={`Send #${nextIndex + 1} to Direction`}>
+            ▶ Fire next · {nextIndex + 1}/{prompts.length}
+          </button>
+        ) : (
+          <span className="sb-arch-count">0</span>
+        )}
       </div>
       <form
         className="sb-arch-add"
@@ -323,7 +338,7 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
           {prompts.map((p, i) => (
             <li
               key={p.id}
-              className={`${overIndex === i ? "is-drop-before" : ""}`}
+              className={`${overIndex === i ? "is-drop-before" : ""} ${i === nextIndex ? "is-next" : ""}`}
               draggable={editing !== p.id}
               onDragStart={(e) => {
                 dragId.current = p.id;
@@ -378,7 +393,7 @@ function PromptArchive({ prompts, onAddPrompts, onSetPrompts, onUsePrompt }: Pro
                 </span>
               )}
               <span className="sb-prompt-tools">
-                <button title="Use now" onClick={() => onUsePrompt(p.text)}>→</button>
+                <button title="Use now" onClick={() => fire(i)}>→</button>
                 <button title="Move up" onClick={() => move(i, i - 1)} disabled={i === 0}>↑</button>
                 <button title="Move down" onClick={() => move(i, i + 2)} disabled={i === prompts.length - 1}>↓</button>
                 <button title="Remove" onClick={() => onSetPrompts(prompts.filter((x) => x.id !== p.id))}>✕</button>
